@@ -14,6 +14,7 @@ Create a `.dev.vars` file:
 ```
 GITHUB_TOKEN="github_pat_..."
 ANTHROPIC_API_KEY="sk-ant-..."
+TURNSTILE_SECRET="0x..."
 STRIPE_SECRET_KEY="sk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 ```
@@ -39,10 +40,11 @@ src/                React front
 ├── AdSlots.tsx     Ads with their score, the "place my ad" offer, the buy form
 ├── zones.ts        The 5 LARP zones and their colors
 ├── readCv.ts       Reads a PDF CV in the browser
+├── useTurnstile.ts Cloudflare's bot check on the form
 └── api.ts          Calls to our API
 worker/             API server (Cloudflare Worker)
 ├── main.ts         Route menu: which route runs what, behind which guards
-├── guards.ts       Rate limits and same-site checks
+├── guards.ts       Rate limits, same-site and bot checks
 ├── analyze.ts      POST /api/analyze, step by step
 ├── github.ts       Fetches profile, repos and activity from GitHub
 ├── cvCheck.ts      Tells if a text reads like a CV (used by front and server)

@@ -6,6 +6,7 @@ import CvPicker, { type PickedCv } from './CvPicker.tsx'
 import LarpMeter from './LarpMeter.tsx'
 import LoadingPhrase from './LoadingPhrase.tsx'
 import { CONTACT_EMAIL } from './Terms.tsx'
+import { useTurnstile } from './useTurnstile.ts'
 
 // Reads ?ad=success once when Stripe sends the buyer back, then cleans the URL.
 function readPaymentReturn(): 'success' | null {
@@ -30,6 +31,8 @@ export default function App() {
   const [buyingAd, setBuyingAd] = useState(false)
   const [paymentReturn] = useState(readPaymentReturn)
   const githubInput = useRef<HTMLInputElement>(null)
+  const { container: humanCheckBox, token: humanToken, reset: resetHumanCheck } =
+    useTurnstile('analyze')
 
   useEffect(() => {
     fetchAds()
@@ -44,17 +47,22 @@ export default function App() {
       setError('Add a GitHub link, a CV, or both.')
       return
     }
+    if (!humanToken) {
+      setError("Still checking you're not a bot. Try again in a second.")
+      return
+    }
 
     setLoading(true)
     setError(null)
     setHint(null)
     setResult(null)
     try {
-      setResult(await analyzeProfile(github.trim() || null, cv?.input ?? null))
+      setResult(await analyzeProfile(github.trim() || null, cv?.input ?? null, humanToken))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
       setLoading(false)
+      resetHumanCheck()
     }
   }
 
@@ -137,6 +145,7 @@ export default function App() {
               </button>
             </div>
             <CvPicker cv={cv} disabled={loading} onChange={setCv} onError={setError} />
+            <div ref={humanCheckBox} className="human-check" />
           </form>
 
           {error && (

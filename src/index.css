@@ -826,3 +826,12 @@ button.secondary:hover {
   font-family: var(--sans);
   font-size: 0.85rem;
 }
+
+.human-check {
+  display: flex;
+  justify-content: center;
+}
+
+.human-check:empty {
+  display: none;
+}

@@ -15,6 +15,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   cv_unreadable: "We couldn't find text in that PDF. Is it a scan?",
   cv_too_long: 'That PDF is too long to be a CV.',
   not_a_cv: "That PDF doesn't look like a CV. Try a CV or a LinkedIn PDF export.",
+  bot_check_failed: "We couldn't confirm you're human. Reload the page and try again.",
   too_many_requests: 'Easy there. Wait a minute before checking someone else.',
   llm_failed: 'The LARP meter jammed. Try again.',
   invalid_ad: 'Check the fields: a linkedin.com/in/ link, a name and a short headline.',
@@ -51,8 +52,8 @@ function postJson<T>(path: string, data: unknown): Promise<T> {
 }
 
 // Asks the server for the verdict on a GitHub profile, a CV, or both.
-export function analyzeProfile(github: string | null, cv: CvInput | null) {
-  return postJson<AnalyzeResponse>('/api/analyze', { github, cv })
+export function analyzeProfile(github: string | null, cv: CvInput | null, turnstileToken: string) {
+  return postJson<AnalyzeResponse>('/api/analyze', { github, cv, turnstileToken })
 }
 
 // Loads the ads currently running and the slot settings.

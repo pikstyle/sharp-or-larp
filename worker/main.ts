@@ -8,6 +8,7 @@ import {
   limitAnalyses,
   limitApiCalls,
   limitCheckouts,
+  requireHuman,
   requireOwnSiteJson,
 } from './guards.ts'
 import { ApiError } from './types.ts'
@@ -22,6 +23,7 @@ app.post(
   requireOwnSiteJson,
   bodyLimit({ maxSize: 128 * 1024, onError: bodyTooLarge }),
   limitAnalyses,
+  requireHuman,
   analyze,
 )
 app.get('/api/ads', limitApiCalls, listAds)

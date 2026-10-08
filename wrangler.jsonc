@@ -12,6 +12,7 @@
     "required": [
       "GITHUB_TOKEN",
       "ANTHROPIC_API_KEY",
+      "TURNSTILE_SECRET",
       "STRIPE_SECRET_KEY",
       "STRIPE_WEBHOOK_SECRET"
     ]
