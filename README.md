@@ -2,6 +2,9 @@
 
 Drop a GitHub link, a CV, or both. The LARP meter tells you if they're sharp or larping.
 
+## Larp Alert
+This project was 99% vibe coded. 
+
 ## Run locally
 
 Requires Node.js 22.12+ and [Ollama](https://ollama.com) (or any OpenAI-compatible LLM API).
