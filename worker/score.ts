@@ -1,0 +1,250 @@
+import type { Dossier, GithubEvidence, ReadmeStyle, Verdict } from './types.ts'
+
+export type VibeLabel = 'sharp' | 'mostly_sharp' | 'mixed' | 'mostly_larp' | 'larp'
+
+export type Vibe = {
+  vibe: VibeLabel
+  redFlags: string[]
+  greenFlags: string[]
+  roast: string
+}
+
+type Signal = { points: number; text: string | null }
+type Flag = { text: string; weight: number }
+
+export type FactsScore = {
+  larpPercent: number
+  fromGithub: boolean
+  redFlags: Flag[]
+  greenFlags: Flag[]
+}
+
+const GITHUB_BASE_SCORE = 58
+const CV_ONLY_BASE_SCORE = 50
+const CV_ONLY_VIBE_WEIGHT = 0.7
+const MIN_COMMITS_TO_CLAIM = 10
+const NOTABLE_REPO_STARS = 1000
+const BUSY_CONTRIBUTIONS = 500
+const MAX_FLAGS = 3
+const VIBE_CODED_AI_PERCENT = 60
+const SHARP_VIBES: VibeLabel[] = ['sharp', 'mostly_sharp']
+const LARP_VIBES: VibeLabel[] = ['mostly_larp', 'larp']
+const VIBE_SCORES: Record<VibeLabel, number> = {
+  sharp: 10,
+  mostly_sharp: 30,
+  mixed: 50,
+  mostly_larp: 70,
+  larp: 90,
+}
+
+// Formats a number for a flag, e.g. 12450 becomes "12,450".
+function format(value: number): string {
+  return value.toLocaleString('en-US')
+}
+
+// Finds the most starred project they really worked on, their own or pinned.
+function bestProject(github: GithubEvidence): { name: string; stars: number } | null {
+  const login = github.profile.login
+  const ownRepos = github.repos.list.map((repo) => ({
+    name: `${login}/${repo.name}`,
+    stars: repo.stars,
+  }))
+  const workedOn = github.showcase
+    .filter((repo) => !repo.isFork && repo.commitsByThem >= MIN_COMMITS_TO_CLAIM)
+    .map((repo) => ({ name: repo.name, stars: repo.stars }))
+
+  return [...ownRepos, ...workedOn].sort((a, b) => b.stars - a.stars)[0] ?? null
+}
+
+// Turns a flashy profile README into larp points and a flag that says why.
+function readmeSignal(style: ReadmeStyle): Signal | null {
+  const points = Math.min(
+    25,
+    Math.min(8, style.badges * 0.8) +
+      Math.min(8, style.widgets * 3) +
+      Math.min(4, style.images * 0.7) +
+      Math.min(4, style.emojis * 0.3) +
+      Math.min(6, style.templatePhrases * 2),
+  )
+  const parts = [
+    style.badges > 0 && `${style.badges} badges`,
+    style.widgets > 0 && `${style.widgets} stats widgets`,
+    style.emojis >= 5 && `${style.emojis} emojis`,
+    style.templatePhrases > 0 && 'template sections ("Currently learning", "Let\'s connect"…)',
+  ].filter(Boolean)
+
+  return points >= 3 ? { points, text: `Flashy profile README: ${parts.join(', ')}` } : null
+}
+
+// Spots showcase repos written by AI tools rather than by the person.
+function vibeCodingSignal(github: GithubEvidence): Signal | null {
+  const vibeCoded = github.showcase.filter(
+    (repo) => repo.builtWith || repo.aiCommitPercent >= VIBE_CODED_AI_PERCENT,
+  )
+  const [first] = vibeCoded
+  if (!first) {
+    return null
+  }
+
+  const allOfThem = vibeCoded.length === github.showcase.length && vibeCoded.length >= 2
+  const reason = first.builtWith
+    ? `${first.name} was built with ${first.builtWith}`
+    : `${first.aiCommitPercent}% of recent commits in ${first.name} were written by an AI agent`
+  const more = vibeCoded.length > 1 ? ` (+${vibeCoded.length - 1} more vibe-coded)` : ''
+
+  return {
+    points: Math.min(18, 7 * vibeCoded.length) + (allOfThem ? 6 : 0),
+    text: `Vibe-coded: ${reason}${more}`,
+  }
+}
+
+// Lists what their GitHub numbers say, as larp points (+) or sharp points (-).
+function githubSignals(github: GithubEvidence): Signal[] {
+  const { profile, repos, activity, mergedPRsElsewhere: prs } = github
+  const signals: Signal[] = []
+  const busy = activity.contributionsLastYear >= BUSY_CONTRIBUTIONS
+  const best = bestProject(github)
+  const notablePr = prs.examples.find((pr) => pr.repoStars >= NOTABLE_REPO_STARS)
+  const followerPoints = Math.min(14, 4 * Math.log10(1 + profile.followers))
+  const readme = readmeSignal(profile.readmeStyle)
+  const vibeCoding = vibeCodingSignal(github)
+
+  if (best && best.stars > 0) {
+    const points = -Math.min(28, 7 * Math.log10(1 + best.stars))
+    const text = best.stars >= 10 ? `Works on ${best.name} (${format(best.stars)} ★)` : null
+    signals.push({ points, text })
+  }
+  if (profile.followers >= 20 && profile.followers >= profile.following) {
+    const points = profile.followers >= 2 * profile.following ? -followerPoints : -followerPoints / 2
+    const text =
+      profile.followers >= 50
+        ? `${format(profile.followers)} followers, follows ${format(profile.following)}`
+        : null
+    signals.push({ points, text })
+  }
+  if (profile.following >= 200 && profile.followers < profile.following) {
+    const text = `Follows ${format(profile.following)} people, followed by ${format(profile.followers)}`
+    signals.push({ points: 12, text })
+  }
+  if (activity.contributionsLastYear > 0) {
+    const points = -Math.min(14, 3.5 * Math.log10(1 + activity.contributionsLastYear))
+    const text =
+      activity.contributionsLastYear >= 300
+        ? `${format(activity.contributionsLastYear)} contributions in the last year`
+        : null
+    signals.push({ points, text })
+  }
+  if (activity.activeWeeksLastYear > 0) {
+    const points = -(activity.activeWeeksLastYear / 53) * 8
+    const text =
+      activity.activeWeeksLastYear >= 30
+        ? `Active ${activity.activeWeeksLastYear} weeks out of 52`
+        : null
+    signals.push({ points, text })
+  }
+  if (prs.count > 0) {
+    const points = -Math.min(16, 5 * Math.log10(1 + prs.count))
+    const text = prs.count >= 3 ? `${format(prs.count)} PRs merged into other people's projects` : null
+    signals.push({ points, text })
+  }
+  if (notablePr) {
+    const text = `Code merged into ${notablePr.repo} (${format(notablePr.repoStars)} ★)`
+    signals.push({ points: -4, text })
+  }
+  if (readme) {
+    signals.push(readme)
+  }
+  if (vibeCoding) {
+    signals.push(vibeCoding)
+  }
+  if (profile.linkedinOnProfile) {
+    signals.push({ points: 4, text: 'LinkedIn linked from their GitHub profile' })
+  }
+  if (!busy && repos.own >= 5 && repos.empty / repos.own > 0.5) {
+    signals.push({ points: 6, text: `${repos.empty} of their ${repos.own} repos are (nearly) empty` })
+  }
+  if (!busy && repos.forks > repos.own) {
+    signals.push({ points: 4, text: `More forks (${repos.forks}) than own repos (${repos.own})` })
+  }
+  if (github.suspectedAutoCommits) {
+    const { repo, percentOfYearCommits } = github.suspectedAutoCommits
+    const text = `${repo} holds ${percentOfYearCommits}% of the year's commits, mostly the same message`
+    signals.push({ points: 15, text })
+  }
+  if (!busy && activity.maxReposCreatedSameWeek >= 10) {
+    const text = `${activity.maxReposCreatedSameWeek} repos created in a single week`
+    signals.push({ points: 6, text })
+  }
+  if (repos.own >= 3 && (best?.stars ?? 0) === 0) {
+    signals.push({ points: 5, text: `Not a single star across their ${repos.own} repos` })
+  }
+  if (activity.contributionsLastYear < 50) {
+    const text = `Only ${activity.contributionsLastYear} contributions in the last year`
+    signals.push({ points: 5, text })
+  }
+  return signals
+}
+
+// Lists what the CV's links say: dead links count against, working ones for.
+function cvSignals(cv: Dossier['cv']): Signal[] {
+  const links = cv?.links ?? []
+  const dead = links.filter((link) => link.status === 'dead')
+  const working = links.filter((link) => link.status === 'ok')
+  const signals: Signal[] = dead.slice(0, 2).map((link) => ({
+    points: 6,
+    text: `Dead link in their CV: ${new URL(link.url).hostname}`,
+  }))
+
+  if (working.length > 0) {
+    const text = working.length >= 2 ? `${working.length} links in their CV lead to real pages` : null
+    signals.push({ points: -Math.min(6, working.length * 2), text })
+  }
+  return signals
+}
+
+// Scores what the facts say, from 0 (sharp) to 100 (larp), with the reasons.
+export function scoreFacts(dossier: Dossier): FactsScore {
+  const signals = [
+    ...(dossier.github ? githubSignals(dossier.github) : []),
+    ...cvSignals(dossier.cv),
+  ]
+  const base = dossier.github ? GITHUB_BASE_SCORE : CV_ONLY_BASE_SCORE
+  const total = signals.reduce((sum, signal) => sum + signal.points, base)
+
+  return {
+    larpPercent: Math.min(100, Math.max(0, total)),
+    fromGithub: dossier.github !== null,
+    redFlags: signals.flatMap(({ points, text }) =>
+      points > 0 && text ? [{ text, weight: points }] : [],
+    ),
+    greenFlags: signals.flatMap(({ points, text }) =>
+      points < 0 && text ? [{ text, weight: -points }] : [],
+    ),
+  }
+}
+
+// Keeps the strongest fact-based flags and fills up with the LLM's ones.
+function pickFlags(factFlags: Flag[], vibeFlags: string[]): string[] {
+  const strongest = [...factFlags]
+    .sort((a, b) => b.weight - a.weight)
+    .map((flag) => flag.text)
+  const fromFacts = strongest.slice(0, vibeFlags.length > 0 ? MAX_FLAGS - 1 : MAX_FLAGS)
+
+  return [...fromFacts, ...vibeFlags].slice(0, MAX_FLAGS)
+}
+
+// Blends the facts and the LLM's gut feeling into the final verdict.
+export function combineVerdict(facts: FactsScore, vibe: Vibe): Verdict {
+  const certainty = Math.abs(facts.larpPercent - 50) / 50
+  const vibeWeight = facts.fromGithub ? 0.4 - 0.2 * certainty : CV_ONLY_VIBE_WEIGHT
+  const blended = (1 - vibeWeight) * facts.larpPercent + vibeWeight * VIBE_SCORES[vibe.vibe]
+  const vibeRedFlags = SHARP_VIBES.includes(vibe.vibe) ? [] : vibe.redFlags
+  const vibeGreenFlags = LARP_VIBES.includes(vibe.vibe) ? [] : vibe.greenFlags
+
+  return {
+    larpPercent: Math.round(blended),
+    redFlags: pickFlags(facts.redFlags, vibeRedFlags),
+    greenFlags: pickFlags(facts.greenFlags, vibeGreenFlags),
+    roast: vibe.roast,
+  }
+}

@@ -9,10 +9,15 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "dependencies": {
+    "@fontsource-variable/libre-franklin": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
     "hono": "^4.13.13",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

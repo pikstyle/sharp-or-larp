@@ -1,14 +1,37 @@
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
-export type Dossier = {
+export type CvInput = {
+  text: string
+  links: string[]
+}
+
+export type LinkCheck = {
+  url: string
+  status: 'ok' | 'dead' | 'skipped'
+  note: string | null
+}
+
+export type ReadmeStyle = {
+  badges: number
+  widgets: number
+  images: number
+  emojis: number
+  templatePhrases: number
+}
+
+export type GithubEvidence = {
   profile: {
     login: string
     bio: string | null
+    websiteUrl: string | null
+    linkedinOnProfile: boolean
     accountAgeDays: number
     followers: number
     following: number
     profileReadme: string | null
+    readmeStyle: ReadmeStyle
   }
+  website: LinkCheck | null
   repos: {
     own: number
     forks: number
@@ -39,23 +62,57 @@ export type Dossier = {
   }
   showcase: {
     name: string
+    description: string | null
     pinned: boolean
+    linkedFromCv: boolean
     isFork: boolean
     language: string | null
     stars: number
     forks: number
     issuesByOthers: number
     commits: number
+    commitsByThem: number
+    aiCommitPercent: number
+    builtWith: string | null
     createdAt: string
     lastPushAt: string | null
     readmeExcerpt: string | null
   }[]
 }
 
+export type Dossier = {
+  github: GithubEvidence | null
+  cv: { text: string; links: LinkCheck[] } | null
+}
+
+export type Verdict = {
+  larpPercent: number
+  redFlags: string[]
+  greenFlags: string[]
+  roast: string
+}
+
 export type AnalyzeResponse = {
-  login: string
-  avatarUrl: string
-  dossier: Dossier
+  login: string | null
+  avatarUrl: string | null
+  verdict: Verdict
+}
+
+export type Ad = {
+  name: string
+  headline: string
+  linkedinUrl: string
+}
+
+export type AdsResponse = {
+  ads: Ad[]
+  slots: number
+  priceUsd: number
+  days: number
+}
+
+export type AdCheckoutResponse = {
+  url: string
 }
 
 // An error that carries the HTTP status and error code to answer with.

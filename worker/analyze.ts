@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { buildCv, fetchCvLinks, findGithubLoginInCv, planCvLinks } from './cv.ts'
 import {
   buildActivity,
   buildMergedPRs,
@@ -6,52 +7,144 @@ import {
   buildRepos,
   buildShowcase,
   detectAutoCommits,
+  findWebsite,
 } from './dossier.ts'
 import {
   fetchGithubDetails,
   fetchGithubOverview,
   parseGithubLogin,
   pickReposToInspect,
+  type GithubOverview,
 } from './github.ts'
-import { ApiError, type AnalyzeResponse, type Dossier } from './types.ts'
+import { judgeVibe, parseVibe } from './judge.ts'
+import { combineVerdict, scoreFacts } from './score.ts'
+import {
+  ApiError,
+  type AnalyzeResponse,
+  type CvInput,
+  type Dossier,
+  type GithubEvidence,
+} from './types.ts'
+import { checkLink } from './web.ts'
 
 type AppContext = Context<{ Bindings: Env }>
 
-// Reads the request body and returns the GitHub link it contains.
-async function readAnalyzeRequest(c: AppContext): Promise<string> {
-  const body = await c.req.json().catch(() => null)
+const CV_MIN_CHARS = 300
+const CV_MAX_CHARS = 30000
+const CV_MAX_LINKS = 30
+const GITHUB_INPUT_MAX_CHARS = 200
 
-  if (typeof body?.github !== 'string') {
+// Checks the optional CV: readable text and a list of links.
+function readCv(value: unknown): CvInput | null {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  const cv = value as { text?: unknown; links?: unknown }
+  if (typeof cv.text !== 'string' || !Array.isArray(cv.links)) {
     throw new ApiError(400, 'invalid_body')
   }
-  return body.github
+  if (cv.text.trim().length < CV_MIN_CHARS) {
+    throw new ApiError(400, 'cv_unreadable')
+  }
+  if (cv.text.length > CV_MAX_CHARS) {
+    throw new ApiError(400, 'cv_too_long')
+  }
+
+  const links = cv.links.filter(
+    (link): link is string => typeof link === 'string' && link.length <= 500,
+  )
+  return { text: cv.text, links: links.slice(0, CV_MAX_LINKS) }
 }
 
-// Runs the POST /api/analyze steps in order and answers with the result.
-export async function analyze(c: AppContext) {
-  const github = await readAnalyzeRequest(c)
-  const login = parseGithubLogin(github)
-  const overview = await fetchGithubOverview(login, c.env.GITHUB_TOKEN)
-  const toInspect = pickReposToInspect(overview)
-  const details = await fetchGithubDetails(
-    overview.login,
-    toInspect.ids,
-    c.env.GITHUB_TOKEN,
-  )
+// Reads the request body: a GitHub link, a CV, or both.
+async function readAnalyzeRequest(c: AppContext) {
+  const body = await c.req.json().catch(() => null)
+  const github = body?.github ?? null
 
-  const dossier: Dossier = {
+  if (github !== null && (typeof github !== 'string' || github.length > GITHUB_INPUT_MAX_CHARS)) {
+    throw new ApiError(400, 'invalid_body')
+  }
+
+  const cv = readCv(body?.cv)
+  if (!github?.trim() && !cv) {
+    throw new ApiError(400, 'missing_input')
+  }
+  return { github: github?.trim() || null, cv }
+}
+
+// Loads the GitHub profile given, or the one the CV points to if it exists.
+async function loadGithubProfile(
+  github: string | null,
+  cv: CvInput | null,
+  token: string,
+): Promise<GithubOverview | null> {
+  if (github) {
+    return fetchGithubOverview(parseGithubLogin(github), token)
+  }
+
+  const loginInCv = cv ? findGithubLoginInCv(cv.links) : null
+  if (!loginInCv) {
+    return null
+  }
+  return fetchGithubOverview(loginInCv, token).catch((error: unknown) => {
+    if (error instanceof ApiError && error.code === 'github_user_not_found') {
+      return null
+    }
+    throw error
+  })
+}
+
+// Collects the GitHub evidence: details of the key repos and their website.
+async function collectGithubEvidence(
+  overview: GithubOverview,
+  cvRepoNames: string[],
+  token: string,
+): Promise<GithubEvidence> {
+  const toInspect = pickReposToInspect(overview, cvRepoNames)
+  const websiteUrl = findWebsite(overview)
+  const [details, website] = await Promise.all([
+    fetchGithubDetails(overview, toInspect.ids, token),
+    websiteUrl ? checkLink(websiteUrl) : null,
+  ])
+
+  return {
     profile: buildProfile(overview),
+    website,
     repos: buildRepos(overview),
     activity: buildActivity(overview),
     suspectedAutoCommits: detectAutoCommits(overview, details),
     mergedPRsElsewhere: buildMergedPRs(details),
-    showcase: buildShowcase(overview, toInspect.showcase, details),
+    showcase: buildShowcase(overview, toInspect.showcase, cvRepoNames, details),
   }
+}
+
+// Runs the POST /api/analyze steps in order and answers with the verdict.
+export async function analyze(c: AppContext) {
+  const request = await readAnalyzeRequest(c)
+  const overview = await loadGithubProfile(request.github, request.cv, c.env.GITHUB_TOKEN)
+  const cvPlan = request.cv ? planCvLinks(request.cv.links, overview?.login ?? null) : null
+  const cvRepoNames = cvPlan?.repoNames ?? []
+
+  const [github, cvLinks] = await Promise.all([
+    overview ? collectGithubEvidence(overview, cvRepoNames, c.env.GITHUB_TOKEN) : null,
+    fetchCvLinks(cvPlan),
+  ])
+  const dossier: Dossier = { github, cv: buildCv(request.cv, cvPlan, cvLinks) }
+
+  const facts = scoreFacts(dossier)
+  const vibe = parseVibe(await judgeVibe(dossier, c.env))
+  const verdict = combineVerdict(facts, vibe)
+  console.log('verdict', overview?.login ?? 'cv-only', {
+    facts: Math.round(facts.larpPercent),
+    vibe: vibe.vibe,
+    final: verdict.larpPercent,
+  })
 
   const response: AnalyzeResponse = {
-    login: overview.login,
-    avatarUrl: overview.avatarUrl,
-    dossier,
+    login: overview?.login ?? null,
+    avatarUrl: overview?.avatarUrl ?? null,
+    verdict,
   }
   return c.json(response)
 }

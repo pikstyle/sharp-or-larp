@@ -74,9 +74,14 @@ const OVERVIEW_QUERY = `
 
   query Overview($login: String!) {
     user(login: $login) {
+      id
       login
       avatarUrl(size: 200)
       bio
+      websiteUrl
+      socialAccounts(first: 10) {
+        nodes { provider url }
+      }
       createdAt
       followers { totalCount }
       following { totalCount }
@@ -135,9 +140,12 @@ export type GithubRepo = {
 }
 
 export type GithubOverview = {
+  id: string
   login: string
   avatarUrl: string
   bio: string | null
+  websiteUrl: string | null
+  socialAccounts: { nodes: { provider: string; url: string }[] }
   createdAt: string
   followers: { totalCount: number }
   following: { totalCount: number }
@@ -180,14 +188,19 @@ export type ReposToInspect = {
   ids: string[]
 }
 
-// Picks the showcase repos, pinned first, plus the repo with most commits.
-export function pickReposToInspect(overview: GithubOverview): ReposToInspect {
-  const mostStarred = [...overview.ownRepos.nodes].sort(
-    (a, b) => b.stargazerCount - a.stargazerCount,
+// Picks showcase repos: pinned, then linked from the CV, then most starred.
+export function pickReposToInspect(
+  overview: GithubOverview,
+  cvRepoNames: string[],
+): ReposToInspect {
+  const ownRepos = overview.ownRepos.nodes
+  const linkedFromCv = ownRepos.filter((repo) =>
+    cvRepoNames.includes(repo.nameWithOwner.toLowerCase()),
   )
+  const mostStarred = [...ownRepos].sort((a, b) => b.stargazerCount - a.stargazerCount)
   const showcase: GithubRepo[] = []
 
-  for (const repo of [...overview.pinnedRepos.nodes, ...mostStarred]) {
+  for (const repo of [...overview.pinnedRepos.nodes, ...linkedFromCv, ...mostStarred]) {
     if (showcase.length === SHOWCASE_SIZE) {
       break
     }
@@ -207,7 +220,7 @@ export function pickReposToInspect(overview: GithubOverview): ReposToInspect {
 }
 
 const DETAILS_QUERY = `
-  query Details($ids: [ID!]!, $prQuery: String!) {
+  query Details($ids: [ID!]!, $prQuery: String!, $userId: ID!) {
     repos: nodes(ids: $ids) {
       ... on Repository {
         nameWithOwner
@@ -220,7 +233,13 @@ const DETAILS_QUERY = `
         defaultBranchRef {
           target {
             ... on Commit {
-              history(first: 50) { nodes { messageHeadline } }
+              history(first: 50) {
+                nodes {
+                  message
+                  author { name user { login } }
+                }
+              }
+              byThem: history(first: 1, author: { id: $userId }) { totalCount }
             }
           }
         }
@@ -238,12 +257,20 @@ const DETAILS_QUERY = `
   }
 `
 
+export type GithubCommit = {
+  message: string
+  author: { name: string | null; user: { login: string } | null } | null
+}
+
 export type GithubRepoDetails = {
   nameWithOwner: string
   readme: { text: string | null } | null
   issues: { nodes: { author: { login: string } | null }[] }
   defaultBranchRef: {
-    target: { history: { nodes: { messageHeadline: string }[] } }
+    target: {
+      history: { nodes: GithubCommit[] }
+      byThem: { totalCount: number }
+    }
   } | null
 }
 
@@ -260,11 +287,12 @@ export type GithubDetails = {
 
 // Fetches READMEs, issues and commits of the picked repos, plus merged PRs.
 export async function fetchGithubDetails(
-  login: string,
+  overview: GithubOverview,
   ids: string[],
   token: string,
 ): Promise<GithubDetails> {
-  const prQuery = `author:${login} is:pr is:merged -user:${login}`
+  const prQuery = `author:${overview.login} is:pr is:merged -user:${overview.login}`
+  const variables = { ids, prQuery, userId: overview.id }
 
-  return queryGithub<GithubDetails>(DETAILS_QUERY, { ids, prQuery }, token)
+  return queryGithub<GithubDetails>(DETAILS_QUERY, variables, token)
 }
