@@ -1,122 +1,80 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState, type SubmitEvent } from 'react'
+import type { AnalyzeResponse } from '../worker/types.ts'
 
-function App() {
-  const [count, setCount] = useState(0)
+const ERROR_MESSAGES: Record<string, string> = {
+  invalid_github: "That doesn't look like a GitHub profile link.",
+  github_user_not_found: 'No GitHub user with that name.',
+  github_failed: 'GitHub is not answering. Try again in a minute.',
+}
+const FALLBACK_ERROR = 'Something went wrong. Try again.'
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+// Sends the GitHub link to the API and returns its answer, or throws a message.
+async function analyzeGithub(github: string): Promise<AnalyzeResponse> {
+  const response = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ github }),
+  })
+  const body = await response.json().catch(() => null)
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+  if (!response.ok || !body) {
+    throw new Error(ERROR_MESSAGES[body?.error] ?? FALLBACK_ERROR)
+  }
+  return body
 }
 
-export default App
+// The page: a title, a GitHub link field and the profile it finds.
+export default function App() {
+  const [github, setGithub] = useState('')
+  const [result, setResult] = useState<AnalyzeResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  // Runs the analysis when the form is sent and stores the answer or the error.
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setError(null)
+    setResult(null)
+
+    try {
+      setResult(await analyzeGithub(github))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : FALLBACK_ERROR)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <main className="page">
+      <h1>sharp-or-larp</h1>
+
+      <form className="search" onSubmit={handleSubmit}>
+        <input
+          value={github}
+          onChange={(event) => setGithub(event.target.value)}
+          placeholder="https://github.com/username"
+          aria-label="GitHub link"
+          required
+        />
+        <button type="submit" disabled={loading}>
+          {loading ? 'Checking…' : 'Check'}
+        </button>
+      </form>
+
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {result && (
+        <section className="profile">
+          <img src={result.avatarUrl} alt="" width={120} height={120} />
+          <p>@{result.login}</p>
+        </section>
+      )}
+    </main>
+  )
+}
