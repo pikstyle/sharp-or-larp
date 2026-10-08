@@ -1,5 +1,7 @@
 import type { Context } from 'hono'
+import { saveCheck } from './checks.ts'
 import { buildCv, fetchCvLinks, findGithubLoginInCv, planCvLinks } from './cv.ts'
+import { findCvProblem } from './cvCheck.ts'
 import {
   buildActivity,
   buildMergedPRs,
@@ -10,6 +12,7 @@ import {
   findWebsite,
 } from './dossier.ts'
 import {
+  fetchCommitCounts,
   fetchGithubDetails,
   fetchGithubOverview,
   parseGithubLogin,
@@ -29,12 +32,10 @@ import { checkLink } from './web.ts'
 
 type AppContext = Context<{ Bindings: Env }>
 
-const CV_MIN_CHARS = 300
-const CV_MAX_CHARS = 30000
 const CV_MAX_LINKS = 30
 const GITHUB_INPUT_MAX_CHARS = 200
 
-// Checks the optional CV: readable text and a list of links.
+// Checks the optional CV: text that reads like a CV, and a list of links.
 function readCv(value: unknown): CvInput | null {
   if (value === undefined || value === null) {
     return null
@@ -44,11 +45,9 @@ function readCv(value: unknown): CvInput | null {
   if (typeof cv.text !== 'string' || !Array.isArray(cv.links)) {
     throw new ApiError(400, 'invalid_body')
   }
-  if (cv.text.trim().length < CV_MIN_CHARS) {
-    throw new ApiError(400, 'cv_unreadable')
-  }
-  if (cv.text.length > CV_MAX_CHARS) {
-    throw new ApiError(400, 'cv_too_long')
+  const problem = findCvProblem(cv.text)
+  if (problem) {
+    throw new ApiError(400, problem)
   }
 
   const links = cv.links.filter(
@@ -103,15 +102,16 @@ async function collectGithubEvidence(
 ): Promise<GithubEvidence> {
   const toInspect = pickReposToInspect(overview, cvRepoNames)
   const websiteUrl = findWebsite(overview)
-  const [details, website] = await Promise.all([
+  const [details, commitCounts, website] = await Promise.all([
     fetchGithubDetails(overview, toInspect.ids, token),
+    fetchCommitCounts(overview.ownRepos.nodes, token),
     websiteUrl ? checkLink(websiteUrl) : null,
   ])
 
   return {
     profile: buildProfile(overview),
     website,
-    repos: buildRepos(overview),
+    repos: buildRepos(overview, commitCounts),
     activity: buildActivity(overview),
     suspectedAutoCommits: detectAutoCommits(overview, details),
     mergedPRsElsewhere: buildMergedPRs(details),
@@ -141,8 +141,10 @@ export async function analyze(c: AppContext) {
     final: verdict.larpPercent,
   })
 
+  const login = overview?.login ?? null
   const response: AnalyzeResponse = {
-    login: overview?.login ?? null,
+    checkId: await saveCheck(c.env.DB, { githubLogin: login, larpPercent: verdict.larpPercent }),
+    login,
     avatarUrl: overview?.avatarUrl ?? null,
     verdict,
   }

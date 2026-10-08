@@ -1,7 +1,9 @@
 import { ApiError } from './types.ts'
 
 const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql'
+const GITHUB_ATTEMPTS = 2
 const SHOWCASE_SIZE = 5
+const COMMIT_COUNT_BATCH = 25
 
 // Extracts the GitHub username from a profile link, a repo link or a bare name.
 export function parseGithubLogin(input: string): string {
@@ -22,30 +24,51 @@ type GraphqlResult<T> = {
   errors?: { type?: string }[]
 }
 
+// Posts a query to GitHub, once more if it times out (it gives up after 10 s).
+async function postToGithub(body: string, token: string): Promise<Response | null> {
+  for (let attempt = 1; attempt <= GITHUB_ATTEMPTS; attempt++) {
+    const response = await fetch(GITHUB_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'sharp-or-larp',
+      },
+      body,
+    }).catch(() => null)
+
+    if (response && response.status < 500) {
+      return response
+    }
+    console.error('GitHub did not answer, attempt', attempt, response?.status)
+  }
+  return null
+}
+
 // Sends a GraphQL query to GitHub and returns the data it answers with.
 async function queryGithub<T>(
   query: string,
   variables: Record<string, unknown>,
   token: string,
 ): Promise<T> {
-  const response = await fetch(GITHUB_GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'sharp-or-larp',
-    },
-    body: JSON.stringify({ query, variables }),
-  })
+  const response = await postToGithub(JSON.stringify({ query, variables }), token)
 
-  if (!response.ok) {
-    console.error('GitHub answered with status', response.status)
+  if (response?.status === 403 || response?.status === 429) {
+    console.error('GitHub refused: rate limit', response.status)
+    throw new ApiError(503, 'github_rate_limited')
+  }
+  if (!response?.ok) {
+    console.error('GitHub answered with status', response?.status)
     throw new ApiError(502, 'github_failed')
   }
 
   const result = await response.json<GraphqlResult<T>>()
   const realErrors = result.errors?.filter((error) => error.type !== 'NOT_FOUND')
 
+  if (realErrors?.some((error) => error.type === 'RATE_LIMITED')) {
+    console.error('GitHub refused: rate limit', realErrors)
+    throw new ApiError(503, 'github_rate_limited')
+  }
   if (realErrors?.length || !result.data) {
     console.error('GitHub answered with errors', result.errors)
     throw new ApiError(502, 'github_failed')
@@ -65,11 +88,6 @@ const OVERVIEW_QUERY = `
     forkCount
     createdAt
     pushedAt
-    defaultBranchRef {
-      target {
-        ... on Commit { history(first: 1) { totalCount } }
-      }
-    }
   }
 
   query Overview($login: String!) {
@@ -136,7 +154,6 @@ export type GithubRepo = {
   forkCount: number
   createdAt: string
   pushedAt: string | null
-  defaultBranchRef: { target: { history: { totalCount: number } } } | null
 }
 
 export type GithubOverview = {
@@ -219,6 +236,51 @@ export function pickReposToInspect(
   return { showcase, ids }
 }
 
+const COMMIT_COUNTS_QUERY = `
+  query CommitCounts($ids: [ID!]!) {
+    repos: nodes(ids: $ids) {
+      ... on Repository {
+        id
+        defaultBranchRef {
+          target {
+            ... on Commit { history(first: 1) { totalCount } }
+          }
+        }
+      }
+    }
+  }
+`
+
+type CommitCounts = {
+  repos: ({
+    id: string
+    defaultBranchRef: { target: { history: { totalCount: number } } } | null
+  } | null)[]
+}
+
+// Counts each repo's commits in small batches: GitHub times out on 100 at once.
+export async function fetchCommitCounts(
+  repos: GithubRepo[],
+  token: string,
+): Promise<Map<string, number>> {
+  const batches: string[][] = []
+  for (let start = 0; start < repos.length; start += COMMIT_COUNT_BATCH) {
+    batches.push(repos.slice(start, start + COMMIT_COUNT_BATCH).map((repo) => repo.id))
+  }
+
+  const answers = await Promise.all(
+    batches.map((ids) => queryGithub<CommitCounts>(COMMIT_COUNTS_QUERY, { ids }, token)),
+  )
+  const counts = new Map<string, number>()
+
+  for (const repo of answers.flatMap((answer) => answer.repos)) {
+    if (repo) {
+      counts.set(repo.id, repo.defaultBranchRef?.target.history.totalCount ?? 0)
+    }
+  }
+  return counts
+}
+
 const DETAILS_QUERY = `
   query Details($ids: [ID!]!, $prQuery: String!, $userId: ID!) {
     repos: nodes(ids: $ids) {
@@ -234,6 +296,7 @@ const DETAILS_QUERY = `
           target {
             ... on Commit {
               history(first: 50) {
+                totalCount
                 nodes {
                   message
                   author { name user { login } }
@@ -268,7 +331,7 @@ export type GithubRepoDetails = {
   issues: { nodes: { author: { login: string } | null }[] }
   defaultBranchRef: {
     target: {
-      history: { nodes: GithubCommit[] }
+      history: { totalCount: number; nodes: GithubCommit[] }
       byThem: { totalCount: number }
     }
   } | null

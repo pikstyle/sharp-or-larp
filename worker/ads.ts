@@ -1,8 +1,10 @@
 import type { Context } from 'hono'
+import { findRecentCheck } from './checks.ts'
 import {
   ApiError,
   type Ad,
   type AdCheckoutResponse,
+  type AdRequest,
   type AdsResponse,
 } from './types.ts'
 
@@ -15,13 +17,18 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const NAME_MAX_CHARS = 40
 const HEADLINE_MAX_CHARS = 80
 const SIGNATURE_TOLERANCE_S = 300
+const CHECKOUT_MINUTES = 31
+const PAID_EVENTS = ['checkout.session.completed', 'checkout.session.async_payment_succeeded']
 const LINKEDIN_PROFILE = /^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/in\/[\w\-%]+\/?$/i
+const GITHUB_LOGIN = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i
+const CHECK_ID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 
 // Lists the ads that are paid for and still running, oldest first.
 export async function listAds(c: AppContext) {
   const { results } = await c.env.DB.prepare(
-    `SELECT name, headline, linkedin_url AS linkedinUrl FROM ads
-     WHERE expires_at > ? ORDER BY created_at ASC LIMIT ?`,
+    `SELECT name, headline, linkedin_url AS linkedinUrl,
+       larp_percent AS larpPercent, github_login AS githubLogin
+     FROM ads WHERE expires_at > ? ORDER BY created_at ASC LIMIT ?`,
   )
     .bind(Date.now(), AD_SLOTS)
     .all<Ad>()
@@ -44,17 +51,21 @@ function readText(value: unknown, maxChars: number): string | null {
   return text.length > 0 && text.length <= maxChars ? text : null
 }
 
-// Checks the ad form: a LinkedIn profile URL, a name and a short headline.
-async function readAdRequest(c: AppContext): Promise<Ad> {
+// Checks the ad form: a LinkedIn URL, a name, a headline and the check's id.
+async function readAdRequest(c: AppContext): Promise<AdRequest> {
   const body = await c.req.json().catch(() => null)
   const name = readText(body?.name, NAME_MAX_CHARS)
   const headline = readText(body?.headline, HEADLINE_MAX_CHARS)
   const linkedinUrl = readText(body?.linkedinUrl, 200)
+  const checkId = readText(body?.checkId, 36)
 
   if (!name || !headline || !linkedinUrl || !LINKEDIN_PROFILE.test(linkedinUrl)) {
     throw new ApiError(400, 'invalid_ad')
   }
-  return { name, headline, linkedinUrl }
+  if (!checkId || !CHECK_ID.test(checkId)) {
+    throw new ApiError(400, 'check_expired')
+  }
+  return { name, headline, linkedinUrl, checkId }
 }
 
 // Counts the ads currently on display.
@@ -66,12 +77,43 @@ async function countActiveAds(db: D1Database): Promise<number> {
   return row?.count ?? 0
 }
 
+// Sends a form to a Stripe API endpoint and returns its JSON answer.
+async function postToStripe<T>(
+  path: string,
+  form: URLSearchParams,
+  secretKey: string,
+  idempotencyKey?: string,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${secretKey}`,
+    'Content-Type': 'application/x-www-form-urlencoded',
+  }
+  if (idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey
+  }
+
+  const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method: 'POST',
+    headers,
+    body: form,
+  })
+  const body = await response.json<T & { error?: unknown }>()
+
+  if (!response.ok) {
+    console.error(`Stripe refused ${path}`, response.status, body.error)
+    throw new ApiError(502, 'stripe_failed')
+  }
+  return body
+}
+
 // Asks Stripe for a payment page for one ad slot and returns its address.
 async function createStripeCheckout(ad: Ad, origin: string, secretKey: string) {
   const form = new URLSearchParams({
     mode: 'payment',
+    'managed_payments[enabled]': 'false',
     success_url: `${origin}/?ad=success`,
     cancel_url: `${origin}/?ad=cancelled`,
+    expires_at: String(Math.floor(Date.now() / 1000) + CHECKOUT_MINUTES * 60),
     'line_items[0][quantity]': '1',
     'line_items[0][price_data][currency]': 'usd',
     'line_items[0][price_data][unit_amount]': String(AD_PRICE_CENTS),
@@ -79,20 +121,15 @@ async function createStripeCheckout(ad: Ad, origin: string, secretKey: string) {
     'metadata[name]': ad.name,
     'metadata[headline]': ad.headline,
     'metadata[linkedin_url]': ad.linkedinUrl,
+    'metadata[larp_percent]': String(ad.larpPercent),
   })
+  if (ad.githubLogin) {
+    form.set('metadata[github_login]', ad.githubLogin)
+  }
 
-  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${secretKey}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: form,
-  })
-  const session = await response.json<{ url?: string; error?: unknown }>()
+  const session = await postToStripe<{ url?: string }>('checkout/sessions', form, secretKey)
 
-  if (!response.ok || !session.url) {
-    console.error('Stripe refused the checkout', response.status, session.error)
+  if (!session.url) {
     throw new ApiError(502, 'stripe_failed')
   }
   return session.url
@@ -100,12 +137,17 @@ async function createStripeCheckout(ad: Ad, origin: string, secretKey: string) {
 
 // Starts buying an ad slot: checks the ad and sends back Stripe's page URL.
 export async function createAdCheckout(c: AppContext) {
-  const ad = await readAdRequest(c)
+  const { checkId, ...text } = await readAdRequest(c)
+  const check = await findRecentCheck(c.env.DB, checkId)
 
+  if (!check) {
+    throw new ApiError(400, 'check_expired')
+  }
   if ((await countActiveAds(c.env.DB)) >= AD_SLOTS) {
     throw new ApiError(409, 'ads_sold_out')
   }
 
+  const ad: Ad = { ...text, ...check }
   const origin = new URL(c.req.url).origin
   const response: AdCheckoutResponse = {
     url: await createStripeCheckout(ad, origin, c.env.STRIPE_SECRET_KEY),
@@ -153,15 +195,99 @@ async function verifyStripeSignature(payload: string, header: string, secret: st
   return signatures.some((signature) => sameText(signature, expected))
 }
 
+type StripeSession = {
+  id: string
+  payment_status?: string
+  payment_intent?: string | null
+  metadata?: {
+    name?: string
+    headline?: string
+    linkedin_url?: string
+    larp_percent?: string
+    github_login?: string
+  }
+}
+
 type StripeEvent = {
   type: string
-  data: {
-    object: {
-      id: string
-      payment_status?: string
-      metadata?: { name?: string; headline?: string; linkedin_url?: string }
-    }
+  data: { object: StripeSession }
+}
+
+// Returns the ad of a fully paid checkout, or null for any other event.
+function readPaidAd(event: StripeEvent): Ad | null {
+  const session = event.data.object
+  const meta = session.metadata
+  const larpPercent = Number(meta?.larp_percent)
+  const githubLogin = meta?.github_login ?? ''
+
+  if (
+    !PAID_EVENTS.includes(event.type) ||
+    session.payment_status !== 'paid' ||
+    !meta?.name ||
+    !meta.headline ||
+    !meta.linkedin_url ||
+    !LINKEDIN_PROFILE.test(meta.linkedin_url) ||
+    !Number.isInteger(larpPercent) ||
+    larpPercent < 0 ||
+    larpPercent > 100
+  ) {
+    return null
   }
+  return {
+    name: meta.name,
+    headline: meta.headline,
+    linkedinUrl: meta.linkedin_url,
+    larpPercent,
+    githubLogin: GITHUB_LOGIN.test(githubLogin) ? githubLogin : null,
+  }
+}
+
+// Saves a paid ad if a slot is free; false means every slot is taken.
+async function publishAd(db: D1Database, sessionId: string, ad: Ad): Promise<boolean> {
+  const now = Date.now()
+  const result = await db
+    .prepare(
+      `INSERT OR IGNORE INTO ads
+       (stripe_session_id, name, headline, linkedin_url, larp_percent, github_login,
+        created_at, expires_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM ads WHERE expires_at > ?) < ?`,
+    )
+    .bind(
+      sessionId,
+      ad.name,
+      ad.headline,
+      ad.linkedinUrl,
+      ad.larpPercent,
+      ad.githubLogin,
+      now,
+      now + AD_DAYS * DAY_MS,
+      now,
+      AD_SLOTS,
+    )
+    .run()
+
+  if (result.meta.changes > 0) {
+    return true
+  }
+  const existing = await db
+    .prepare('SELECT 1 FROM ads WHERE stripe_session_id = ?')
+    .bind(sessionId)
+    .first()
+  return existing !== null
+}
+
+// Gives the buyer their money back when every slot was taken before they paid.
+async function refundSoldOutAd(session: StripeSession, secretKey: string) {
+  if (!session.payment_intent) {
+    console.error('Sold-out ad paid without a payment intent', session.id)
+    return
+  }
+  const form = new URLSearchParams({
+    payment_intent: session.payment_intent,
+    'metadata[reason]': 'ads_sold_out',
+  })
+  await postToStripe('refunds', form, secretKey, `refund-${session.id}`)
 }
 
 // Receives Stripe's payment confirmations and publishes the paid ad.
@@ -175,24 +301,10 @@ export async function handleStripeWebhook(c: AppContext) {
 
   const event = JSON.parse(payload) as StripeEvent
   const session = event.data.object
-  const meta = session.metadata
+  const ad = readPaidAd(event)
 
-  if (
-    event.type === 'checkout.session.completed' &&
-    session.payment_status === 'paid' &&
-    meta?.name &&
-    meta.headline &&
-    meta.linkedin_url &&
-    LINKEDIN_PROFILE.test(meta.linkedin_url)
-  ) {
-    const now = Date.now()
-    await c.env.DB.prepare(
-      `INSERT OR IGNORE INTO ads
-       (stripe_session_id, name, headline, linkedin_url, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(session.id, meta.name, meta.headline, meta.linkedin_url, now, now + AD_DAYS * DAY_MS)
-      .run()
+  if (ad && !(await publishAd(c.env.DB, session.id, ad))) {
+    await refundSoldOutAd(session, c.env.STRIPE_SECRET_KEY)
   }
   return c.json({ received: true })
 }

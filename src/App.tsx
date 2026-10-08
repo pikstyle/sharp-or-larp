@@ -1,10 +1,11 @@
-import { useEffect, useState, type SubmitEvent } from 'react'
+import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import type { AdsResponse, AnalyzeResponse } from '../worker/types.ts'
-import { AdCard, AdForm, AdStrip } from './AdSlots.tsx'
+import { AdCard, AdForm, AdOffer, AdStrip, type AdScore } from './AdSlots.tsx'
 import { analyzeProfile, fetchAds } from './api.ts'
+import CvPicker, { type PickedCv } from './CvPicker.tsx'
 import LarpMeter from './LarpMeter.tsx'
 import LoadingPhrase from './LoadingPhrase.tsx'
-import { readCv } from './readCv.ts'
+import { CONTACT_EMAIL } from './Terms.tsx'
 
 // Reads ?ad=success once when Stripe sends the buyer back, then cleans the URL.
 function readPaymentReturn(): 'success' | null {
@@ -20,13 +21,15 @@ function readPaymentReturn(): 'success' | null {
 // The page: the form, the LARP meter, the verdict, and ad slots around them.
 export default function App() {
   const [github, setGithub] = useState('')
-  const [cvFile, setCvFile] = useState<File | null>(null)
+  const [cv, setCv] = useState<PickedCv | null>(null)
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [adSettings, setAdSettings] = useState<AdsResponse | null>(null)
   const [buyingAd, setBuyingAd] = useState(false)
   const [paymentReturn] = useState(readPaymentReturn)
+  const githubInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchAds()
@@ -37,17 +40,17 @@ export default function App() {
   // Reads the optional CV, asks for the verdict and shows it or the error.
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!github.trim() && !cvFile) {
+    if (!github.trim() && !cv) {
       setError('Add a GitHub link, a CV, or both.')
       return
     }
 
     setLoading(true)
     setError(null)
+    setHint(null)
     setResult(null)
     try {
-      const cv = cvFile ? await readCv(cvFile) : null
-      setResult(await analyzeProfile(github.trim() || null, cv))
+      setResult(await analyzeProfile(github.trim() || null, cv?.input ?? null))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -56,6 +59,21 @@ export default function App() {
   }
 
   const verdict = result?.verdict
+  const score: AdScore | null =
+    result?.checkId && verdict
+      ? { checkId: result.checkId, larpPercent: verdict.larpPercent, githubLogin: result.login }
+      : null
+
+  // Opens the ad form with this score, or asks for a check first: ads show one.
+  function openAdForm() {
+    if (score) {
+      setBuyingAd(true)
+      return
+    }
+    setHint('Run a check first: your ad shows your LARP score.')
+    githubInput.current?.focus()
+  }
+
   const slots = adSettings?.slots ?? 0
   const ads = adSettings?.ads ?? []
   const freeSlots = Math.max(0, slots - ads.length)
@@ -67,7 +85,7 @@ export default function App() {
           ad={ads[index]}
           settings={adSettings}
           freeSlots={freeSlots}
-          onBuy={() => setBuyingAd(true)}
+          onBuy={openAdForm}
         />
       ))
     : []
@@ -79,13 +97,12 @@ export default function App() {
           ads={ads}
           settings={adSettings}
           position="top"
-          onBuy={() => setBuyingAd(true)}
+          onBuy={openAdForm}
         />
       )}
 
       <div className="layout">
-        <aside className="ads" aria-label="Classifieds">
-          <p className="kicker ads-title">Classifieds</p>
+        <aside className="ads" aria-label="Ads">
           {cards.slice(0, half)}
         </aside>
 
@@ -97,7 +114,6 @@ export default function App() {
           )}
 
           <header className="hero">
-            <p className="kicker">The LARP meter</p>
             <h1>
               sharp<span>-or-</span>larp
             </h1>
@@ -109,6 +125,7 @@ export default function App() {
           <form className="search" onSubmit={handleSubmit}>
             <div className="search-row">
               <input
+                ref={githubInput}
                 value={github}
                 onChange={(event) => setGithub(event.target.value)}
                 placeholder="github.com/username"
@@ -119,19 +136,17 @@ export default function App() {
                 {loading ? 'Checking…' : 'Check'}
               </button>
             </div>
-            <label className="cv-picker">
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(event) => setCvFile(event.target.files?.[0] ?? null)}
-              />
-              {cvFile ? `CV: ${cvFile.name}` : '+ Add a CV or LinkedIn PDF'}
-            </label>
+            <CvPicker cv={cv} disabled={loading} onChange={setCv} onError={setError} />
           </form>
 
           {error && (
             <p className="error" role="alert">
               {error}
+            </p>
+          )}
+          {hint && !error && (
+            <p className="hint" role="status">
+              {hint}
             </p>
           )}
 
@@ -182,10 +197,24 @@ export default function App() {
               </div>
             </section>
           )}
+
+          {score && adSettings && (
+            <AdOffer
+              score={score}
+              settings={adSettings}
+              freeSlots={freeSlots}
+              onBuy={openAdForm}
+            />
+          )}
+
+          <footer className="site-footer">
+            <a href="/terms">Terms & refunds</a>
+            <span aria-hidden="true">·</span>
+            <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
+          </footer>
         </main>
 
-        <aside className="ads" aria-label="Classifieds">
-          <p className="kicker ads-title">Open to work</p>
+        <aside className="ads" aria-label="Ads">
           {cards.slice(half)}
         </aside>
       </div>
@@ -195,12 +224,12 @@ export default function App() {
           ads={[...ads].reverse()}
           settings={adSettings}
           position="bottom"
-          onBuy={() => setBuyingAd(true)}
+          onBuy={openAdForm}
         />
       )}
 
-      {buyingAd && adSettings && (
-        <AdForm settings={adSettings} onClose={() => setBuyingAd(false)} />
+      {buyingAd && adSettings && score && (
+        <AdForm score={score} settings={adSettings} onClose={() => setBuyingAd(false)} />
       )}
     </div>
   )

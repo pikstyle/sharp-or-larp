@@ -1,8 +1,33 @@
 import { useState, type SubmitEvent } from 'react'
-import type { Ad, AdsResponse } from '../worker/types.ts'
+import type { Ad, AdsResponse, AdText } from '../worker/types.ts'
 import { startAdCheckout } from './api.ts'
+import { larpZone } from './zones.ts'
 
 const MIN_TICKER_ITEMS = 6
+
+export type AdScore = {
+  checkId: string
+  larpPercent: number
+  githubLogin: string | null
+}
+
+type ScoreTagProps = {
+  larpPercent: number | null
+  githubLogin: string | null
+  className: string
+}
+
+// Writes an ad's score, e.g. "12% larp · @login", in the color of its zone.
+function ScoreTag({ larpPercent, githubLogin, className }: ScoreTagProps) {
+  if (larpPercent === null) {
+    return null
+  }
+  return (
+    <span className={className} style={{ color: larpZone(larpPercent).ink }}>
+      {larpPercent}% larp · {githubLogin ? `@${githubLogin}` : 'from a CV'}
+    </span>
+  )
+}
 
 type CardProps = {
   ad: Ad | undefined
@@ -11,7 +36,7 @@ type CardProps = {
   onBuy: () => void
 }
 
-// One classified ad in the side columns, or an empty spot to place one.
+// One ad in the side columns, or an empty spot to place one.
 export function AdCard({ ad, settings, freeSlots, onBuy }: CardProps) {
   if (ad) {
     return (
@@ -21,7 +46,7 @@ export function AdCard({ ad, settings, freeSlots, onBuy }: CardProps) {
         target="_blank"
         rel="noopener noreferrer nofollow sponsored"
       >
-        <span className="classified-kicker">Open to work</span>
+        <ScoreTag {...ad} className="classified-kicker" />
         <strong className="classified-name">{ad.name}</strong>
         <span className="classified-headline">{ad.headline}</span>
         <span className="classified-link">LinkedIn →</span>
@@ -49,7 +74,7 @@ type TickerProps = {
   onBuy: () => void
 }
 
-// A news ticker of classifieds that scrolls by, at the top or bottom on phones.
+// A ticker of ads that scrolls by, at the top or bottom on phones.
 export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
   const hasFreeSlot = ads.length < settings.slots
   const items: (Ad | null)[] = [...ads, ...(hasFreeSlot ? [null] : [])]
@@ -74,7 +99,7 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           rel="noopener noreferrer nofollow sponsored"
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <span className="ticker-tag">Open to work</span>
+          <ScoreTag {...ad} className="ticker-tag" />
           <strong>{ad.name}</strong> — {ad.headline}
         </a>
       ) : (
@@ -92,7 +117,7 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
     )
 
   return (
-    <div className={`ticker ticker-${position}`} aria-label="Classifieds">
+    <div className={`ticker ticker-${position}`} aria-label="Ads">
       <div className="ticker-track">
         {renderItems(0)}
         <div className="ticker-copy" aria-hidden="true">
@@ -103,16 +128,49 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
   )
 }
 
+type OfferProps = {
+  score: AdScore
+  settings: AdsResponse
+  freeSlots: number
+  onBuy: () => void
+}
+
+// Invites the person just checked to put their score next to their LinkedIn.
+export function AdOffer({ score, settings, freeSlots, onBuy }: OfferProps) {
+  const zone = larpZone(score.larpPercent)
+
+  return (
+    <section className="ad-offer">
+      <p className="kicker">Is this you?</p>
+      <h2>{score.larpPercent < 40 ? 'Sharp. Show it off.' : 'Own the larp.'}</h2>
+      <p>
+        Put your <strong style={{ color: zone.ink }}>{score.larpPercent}% larp</strong> next to
+        your LinkedIn, in front of everyone checking profiles here. ${settings.priceUsd} for{' '}
+        {settings.days} days.
+      </p>
+      {freeSlots > 0 ? (
+        <button type="button" onClick={onBuy}>
+          Place my ad
+        </button>
+      ) : (
+        <p className="muted">Every spot is taken right now. Come back in a few days.</p>
+      )}
+    </section>
+  )
+}
+
 type FormProps = {
+  score: AdScore
   settings: AdsResponse
   onClose: () => void
 }
 
-// The form to place a classified: it sends the visitor to Stripe to pay.
-export function AdForm({ settings, onClose }: FormProps) {
-  const [ad, setAd] = useState<Ad>({ name: '', headline: '', linkedinUrl: '' })
+// The form to place an ad with a check's score: it sends the visitor to Stripe.
+export function AdForm({ score, settings, onClose }: FormProps) {
+  const [ad, setAd] = useState<AdText>({ name: '', headline: '', linkedinUrl: '' })
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
+  const zone = larpZone(score.larpPercent)
 
   // Creates the Stripe payment page and moves the visitor there.
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
@@ -121,7 +179,7 @@ export function AdForm({ settings, onClose }: FormProps) {
     setError(null)
 
     try {
-      const { url } = await startAdCheckout(ad)
+      const { url } = await startAdCheckout({ ...ad, checkId: score.checkId })
       window.location.assign(url)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -132,11 +190,19 @@ export function AdForm({ settings, onClose }: FormProps) {
   return (
     <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="ad-form-title">
       <form className="ad-form" onSubmit={handleSubmit}>
-        <p className="kicker">Classifieds</p>
         <h2 id="ad-form-title">Place your ad</h2>
+
+        <div className="ad-form-score">
+          <strong style={{ color: zone.ink }}>{score.larpPercent}% larp</strong>
+          <span>
+            {score.githubLogin ? `@${score.githubLogin}` : 'From your CV'} · comes from your
+            check, can't be edited
+          </span>
+        </div>
+
         <p className="ad-form-intro">
-          ${settings.priceUsd} for {settings.days} days. Your name and LinkedIn sit next to every
-          check, in front of students and recruiters.
+          ${settings.priceUsd} for {settings.days} days. Your name, your score and your LinkedIn
+          sit next to every check, in front of students and recruiters.
         </p>
 
         <label>

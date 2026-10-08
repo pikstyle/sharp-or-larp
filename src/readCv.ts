@@ -1,10 +1,12 @@
+import { findCvProblem } from '../worker/cvCheck.ts'
 import type { CvInput } from '../worker/types.ts'
+import { errorMessage } from './api.ts'
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 const MAX_PAGES = 10
 const URL_IN_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"')]+|\b(?:github|gitlab|linkedin)\.com\/[^\s<>"')]+/gi
 
-// Reads a PDF CV in the browser and returns its text and the links inside it.
+// Reads a PDF in the browser and returns its text and links if it is a CV.
 export async function readCv(file: File): Promise<CvInput> {
   if (file.size > MAX_FILE_BYTES) {
     throw new Error('That PDF is over 5 MB. A CV should be much lighter.')
@@ -15,7 +17,9 @@ export async function readCv(file: File): Promise<CvInput> {
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
   const data = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data }).promise
+  const pdf = await pdfjs.getDocument({ data }).promise.catch(() => {
+    throw new Error("That file isn't a readable PDF.")
+  })
   const pages: string[] = []
   const links = new Set<string>()
 
@@ -36,6 +40,11 @@ export async function readCv(file: File): Promise<CvInput> {
   }
 
   const text = pages.join('\n')
+  const problem = findCvProblem(text)
+  if (problem) {
+    throw new Error(errorMessage(problem))
+  }
+
   for (const match of text.matchAll(URL_IN_TEXT)) {
     links.add(match[0].replace(/[.,;:]+$/, ''))
   }

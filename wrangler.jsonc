@@ -6,9 +6,7 @@
   "secrets": {
     "required": [
       "GITHUB_TOKEN",
-      "LLM_BASE_URL",
-      "LLM_MODEL",
-      "LLM_API_KEY",
+      "ANTHROPIC_API_KEY",
       "STRIPE_SECRET_KEY",
       "STRIPE_WEBHOOK_SECRET"
     ]

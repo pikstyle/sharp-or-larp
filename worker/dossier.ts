@@ -36,11 +36,6 @@ const AI_BUILDERS: { name: string; pattern: RegExp }[] = [
 ]
 const URL_IN_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"')]+|\b[\w-]+\.(?:dev|io|com|me|app|xyz|so|ai|co|fr|ca)\b[^\s<>"')]*/gi
 
-// Counts the commits on a repo's main branch, 0 for a repo with no commits.
-function countCommits(repo: GithubRepo): number {
-  return repo.defaultBranchRef?.target.history.totalCount ?? 0
-}
-
 // Turns a part of a total into a whole percentage, 0 when the total is 0.
 function percent(part: number, total: number): number {
   return total === 0 ? 0 : Math.round((part / total) * 100)
@@ -105,8 +100,12 @@ export function findWebsite(overview: GithubOverview): string | null {
 }
 
 // Counts own repos, forks, empty repos and stars, and lists every own repo.
-export function buildRepos(overview: GithubOverview): GithubEvidence['repos'] {
+export function buildRepos(
+  overview: GithubOverview,
+  commitCounts: Map<string, number>,
+): GithubEvidence['repos'] {
   const repos = overview.ownRepos.nodes
+  const countCommits = (repo: GithubRepo) => commitCounts.get(repo.id) ?? 0
 
   return {
     own: overview.ownRepos.totalCount,
@@ -256,7 +255,7 @@ function buildShowcaseRepo(
     stars: repo.stargazerCount,
     forks: repo.forkCount,
     issuesByOthers: issueAuthors.filter((author) => author !== login).length,
-    commits: countCommits(repo),
+    commits: repoDetails?.defaultBranchRef?.target.history.totalCount ?? 0,
     commitsByThem: repoDetails?.defaultBranchRef?.target.byThem.totalCount ?? 0,
     ...measureAiUse(repoDetails),
     createdAt: repo.createdAt.slice(0, 10),

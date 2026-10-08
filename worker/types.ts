@@ -93,15 +93,25 @@ export type Verdict = {
 }
 
 export type AnalyzeResponse = {
+  checkId: string | null
   login: string | null
   avatarUrl: string | null
   verdict: Verdict
 }
 
-export type Ad = {
+export type AdText = {
   name: string
   headline: string
   linkedinUrl: string
+}
+
+export type Ad = AdText & {
+  larpPercent: number | null
+  githubLogin: string | null
+}
+
+export type AdRequest = AdText & {
+  checkId: string
 }
 
 export type AdsResponse = {

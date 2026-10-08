@@ -124,11 +124,6 @@ button.secondary:hover {
     padding: 32px 0;
   }
 
-  .ads-title {
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--rule);
-  }
-
   .page {
     min-height: 100svh;
   }
@@ -139,7 +134,7 @@ button.secondary:hover {
 }
 
 .hero h1 {
-  margin: 10px 0 0;
+  margin: 0;
   font-family: var(--serif);
   font-size: clamp(3rem, 9vw, 5.2rem);
   font-weight: 600;
@@ -219,6 +214,45 @@ button.secondary:hover {
   color: var(--text);
 }
 
+.cv-chosen {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.cv-chosen span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cv-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 1.1rem;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: normal;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+}
+
+.cv-remove:hover {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--muted);
+}
+
 .error {
   margin: 0;
   color: var(--error);
@@ -226,6 +260,13 @@ button.secondary:hover {
 
 .muted {
   color: var(--muted);
+}
+
+.hint {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--text);
 }
 
 .banner {
@@ -418,6 +459,42 @@ button.secondary:hover {
 
 .flags li + li {
   margin-top: 10px;
+}
+
+.ad-offer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 560px;
+  padding: 28px 24px;
+  border: 1px dashed var(--rule);
+  border-radius: 2px;
+}
+
+.ad-offer h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+
+.ad-offer p {
+  margin: 0;
+}
+
+.ad-offer > p:not(.kicker) {
+  max-width: 42ch;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ad-offer button {
+  height: 46px;
+  margin-top: 6px;
 }
 
 .classified {
@@ -624,6 +701,28 @@ button.secondary:hover {
   font-weight: 600;
 }
 
+.ad-form-score {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+}
+
+.ad-form-score strong {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.ad-form-score span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .ad-form-intro {
   margin: 0;
   font-family: var(--serif);
@@ -669,4 +768,61 @@ button.secondary:hover {
 
 .ad-form-actions button {
   height: 44px;
+}
+
+.site-footer {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 24px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.site-footer a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.site-footer a:hover {
+  color: var(--text);
+}
+
+.terms {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 48px 16px 80px;
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+
+.terms h1 {
+  margin: 24px 0 8px;
+  font-size: clamp(2rem, 6vw, 2.8rem);
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.terms h2 {
+  margin: 36px 0 8px;
+  padding-top: 20px;
+  font-size: 1.35rem;
+  font-weight: 600;
+  border-top: 1px solid var(--rule);
+}
+
+.terms p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.terms a {
+  color: var(--text);
+  text-underline-offset: 3px;
+}
+
+.terms-back {
+  font-family: var(--sans);
+  font-size: 0.85rem;
 }

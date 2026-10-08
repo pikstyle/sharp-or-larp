@@ -1,16 +1,10 @@
+import { larpZone, ZONES } from './zones.ts'
+
 const CENTER_X = 170
 const CENTER_Y = 170
 const RADIUS = 130
 const BAND_WIDTH = 52
 const NEEDLE_LENGTH = 120
-
-const ZONES = [
-  { name: 'Low', color: '#4f9d5d', text: '#f4f1ea' },
-  { name: 'Moderate', color: '#d8b64a', text: '#3b2f00' },
-  { name: 'High', color: '#d98a3a', text: '#3d2200' },
-  { name: 'Extreme', color: '#c9483c', text: '#f4f1ea' },
-  { name: 'LARP god', color: '#7e1f2e', text: '#f4f1ea' },
-]
 
 type Props = {
   percent: number
@@ -33,7 +27,7 @@ function zoneArc(index: number): string {
 
 // The LARP meter: five colored zones and a needle that swings to the score.
 export default function LarpMeter({ percent, searching, showReading }: Props) {
-  const zone = ZONES[Math.min(ZONES.length - 1, Math.floor(percent / 20))]
+  const zone = larpZone(percent)
   const label = showReading ? `LARP meter: ${percent}% larp, ${zone.name}` : 'LARP meter'
 
   return (
@@ -76,7 +70,7 @@ export default function LarpMeter({ percent, searching, showReading }: Props) {
 
       {showReading && (
         <figcaption className="meter-reading">
-          <strong style={{ color: zone.color }}>{percent}%</strong>
+          <strong style={{ color: zone.ink }}>{percent}%</strong>
           <span>larp · {zone.name}</span>
         </figcaption>
       )}
