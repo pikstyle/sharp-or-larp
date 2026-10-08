@@ -3,6 +3,11 @@
   "name": "sharp-or-larp",
   "compatibility_date": "2026-10-05",
   "main": "./worker/main.ts",
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "sharporlarp.com", "custom_domain": true },
+    { "pattern": "www.sharporlarp.com", "custom_domain": true }
+  ],
   "secrets": {
     "required": [
       "GITHUB_TOKEN",
