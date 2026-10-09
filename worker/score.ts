@@ -27,6 +27,8 @@ const NOTABLE_REPO_STARS = 1000
 const BUSY_CONTRIBUTIONS = 500
 const MAX_FLAGS = 3
 const VIBE_CODED_AI_PERCENT = 60
+const README_MAX_POINTS = 12
+const LINKEDIN_POINTS = 2
 const SHARP_VIBES: VibeLabel[] = ['sharp', 'mostly_sharp']
 const LARP_VIBES: VibeLabel[] = ['mostly_larp', 'larp']
 const VIBE_SCORES: Record<VibeLabel, number> = {
@@ -40,6 +42,11 @@ const VIBE_SCORES: Record<VibeLabel, number> = {
 // Formats a number for a flag, e.g. 12450 becomes "12,450".
 function format(value: number): string {
   return value.toLocaleString('en-US')
+}
+
+// Writes a count with its word, e.g. "1 badge" or "12 badges".
+function plural(count: number, word: string): string {
+  return `${format(count)} ${word}${count === 1 ? '' : 's'}`
 }
 
 // Finds the most starred project they really worked on, their own or pinned.
@@ -59,17 +66,17 @@ function bestProject(github: GithubEvidence): { name: string; stars: number } | 
 // Turns a flashy profile README into larp points and a flag that says why.
 function readmeSignal(style: ReadmeStyle): Signal | null {
   const points = Math.min(
-    25,
-    Math.min(8, style.badges * 0.8) +
-      Math.min(8, style.widgets * 3) +
-      Math.min(4, style.images * 0.7) +
-      Math.min(4, style.emojis * 0.3) +
-      Math.min(6, style.templatePhrases * 2),
+    README_MAX_POINTS,
+    Math.min(4, style.badges * 0.4) +
+      Math.min(4, style.widgets * 1.5) +
+      Math.min(2, style.images * 0.35) +
+      Math.min(2, style.emojis * 0.15) +
+      Math.min(3, style.templatePhrases),
   )
   const parts = [
-    style.badges > 0 && `${style.badges} badges`,
-    style.widgets > 0 && `${style.widgets} stats widgets`,
-    style.emojis >= 5 && `${style.emojis} emojis`,
+    style.badges > 0 && plural(style.badges, 'badge'),
+    style.widgets > 0 && plural(style.widgets, 'stats widget'),
+    style.emojis >= 5 && plural(style.emojis, 'emoji'),
     style.templatePhrases > 0 && 'template sections ("Currently learning", "Let\'s connect"…)',
   ].filter(Boolean)
 
@@ -158,7 +165,7 @@ function githubSignals(github: GithubEvidence): Signal[] {
     signals.push(vibeCoding)
   }
   if (profile.linkedinOnProfile) {
-    signals.push({ points: 4, text: 'LinkedIn linked from their GitHub profile' })
+    signals.push({ points: LINKEDIN_POINTS, text: 'LinkedIn linked from their GitHub profile' })
   }
   if (!busy && repos.own >= 5 && repos.empty / repos.own > 0.5) {
     signals.push({ points: 6, text: `${repos.empty} of their ${repos.own} repos are (nearly) empty` })

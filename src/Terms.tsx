@@ -5,14 +5,14 @@ export default function Terms() {
   return (
     <main className="terms">
       <a className="terms-back" href="/">
-        ← Back to the LARP meter
+        &lt;- Back to the LARP meter
       </a>
       <h1>Terms, refunds & privacy</h1>
-      <p className="kicker">Last updated October 8, 2026</p>
+      <p className="kicker">Last updated October 9, 2026</p>
 
-      <h2>What sharp-or-larp is</h2>
+      <h2>What Sharp or Larp is</h2>
       <p>
-        sharp-or-larp gives a light-hearted opinion on a public GitHub profile or a CV: a "larp"
+        Sharp or Larp gives a light-hearted opinion on a public GitHub profile or a CV: a "larp"
         percentage, red and green flags, and a one-line roast. The verdict is generated
         automatically by code and an AI model. It is entertainment, not a factual assessment of
         anyone's skills, and should not be used to make hiring decisions.
@@ -22,12 +22,14 @@ export default function Terms() {
       <p>
         An ad costs $10 USD and is shown for 7 days on the side of the site and in the scrolling
         strips on phones. It is published automatically right after payment and shows your name,
-        a short headline, a link to your LinkedIn profile, and the score from your check. The
-        score comes from the check you ran and cannot be edited.
+        a short headline, a link (your LinkedIn, your startup or your site), an optional image,
+        and the score from your check. The score comes from the check you ran and cannot be
+        edited.
       </p>
       <p>
-        Ads must link to your own LinkedIn profile and must not be offensive, misleading or
-        illegal. We remove ads that break these rules.
+        Ads must point to your own profile, project or company. The link and the image must not
+        be offensive, misleading, illegal or harmful (no scams, malware or adult content). We
+        remove ads that break these rules.
       </p>
 
       <h2>Refunds</h2>
@@ -47,8 +49,9 @@ export default function Terms() {
       <p>
         A CV is read in your browser; its text and links are sent to our server and to an AI
         model provider to produce the verdict, then discarded. For each check we keep the GitHub
-        username and the score, so an ad can show it. For ads we keep the name, headline,
-        LinkedIn link and score while the ad runs. We use no tracking cookies.
+        username and the score, so an ad can show it. For ads we keep the name, headline, link,
+        image and score while the ad runs. We use no tracking cookies. Share cards are drawn in
+        your browser and never sent to us.
       </p>
 
       <h2>Contact</h2>

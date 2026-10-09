@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { secureHeaders } from 'hono/secure-headers'
-import { createAdCheckout, handleStripeWebhook, listAds } from './ads.ts'
+import { createAdCheckout, handleStripeWebhook, listAds, serveAdImage } from './ads.ts'
 import { analyze } from './analyze.ts'
 import {
   bodyTooLarge,
@@ -27,11 +27,12 @@ app.post(
   analyze,
 )
 app.get('/api/ads', limitApiCalls, listAds)
+app.get('/api/ads/images/:id', limitApiCalls, serveAdImage)
 app.post(
   '/api/ads/checkout',
   limitApiCalls,
   requireOwnSiteJson,
-  bodyLimit({ maxSize: 4 * 1024, onError: bodyTooLarge }),
+  bodyLimit({ maxSize: 160 * 1024, onError: bodyTooLarge }),
   limitCheckouts,
   createAdCheckout,
 )

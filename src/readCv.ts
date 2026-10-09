@@ -1,3 +1,5 @@
+import type { PDFPageProxy } from 'pdfjs-dist'
+import type { TextContent } from 'pdfjs-dist/types/src/display/api'
 import { findCvProblem } from '../worker/cvCheck.ts'
 import type { CvInput } from '../worker/types.ts'
 import { errorMessage } from './api.ts'
@@ -6,14 +8,30 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024
 const MAX_PAGES = 10
 const URL_IN_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"')]+|\b(?:github|gitlab|linkedin)\.com\/[^\s<>"')]+/gi
 
+// Reads a page's text chunk by chunk: Safari can't loop over pdf.js's stream.
+async function readPageText(page: PDFPageProxy): Promise<string> {
+  const reader = page.streamTextContent().getReader()
+  const words: string[] = []
+
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    const content: TextContent = chunk.value
+    for (const item of content.items) {
+      if ('str' in item) {
+        words.push(item.str)
+      }
+    }
+  }
+  return words.join(' ')
+}
+
 // Reads a PDF in the browser and returns its text and links if it is a CV.
 export async function readCv(file: File): Promise<CvInput> {
   if (file.size > MAX_FILE_BYTES) {
     throw new Error('That PDF is over 5 MB. A CV should be much lighter.')
   }
 
-  const pdfjs = await import('pdfjs-dist')
-  const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const { default: workerUrl } = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
   const data = await file.arrayBuffer()
@@ -29,8 +47,7 @@ export async function readCv(file: File): Promise<CvInput> {
 
   for (let number = 1; number <= pdf.numPages; number++) {
     const page = await pdf.getPage(number)
-    const content = await page.getTextContent()
-    pages.push(content.items.map((item) => ('str' in item ? item.str : '')).join(' '))
+    pages.push(await readPageText(page))
 
     for (const annotation of await page.getAnnotations()) {
       if (annotation.subtype === 'Link' && typeof annotation.url === 'string') {

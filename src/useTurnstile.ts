@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const TURNSTILE_SITEKEY = '0x4AAAAAAFRzCWhUMk1-oyNg'
+const PROD_SITEKEY = '0x4AAAAAAFRzCWhUMk1-oyNg'
+const TEST_SITEKEY = '1x00000000000000000000AA'
+const TURNSTILE_SITEKEY = import.meta.env.DEV ? TEST_SITEKEY : PROD_SITEKEY
 const SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
 
 type TurnstileApi = {
@@ -33,11 +35,12 @@ function loadTurnstile(): Promise<TurnstileApi> {
   return scriptLoading
 }
 
-// Runs Cloudflare's bot check in a box and keeps its latest one-use token.
+// Runs Cloudflare's bot check, shown only if it needs a click, and keeps its token.
 export function useTurnstile(action: string) {
   const container = useRef<HTMLDivElement>(null)
   const widgetId = useRef<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [needsClick, setNeedsClick] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -55,6 +58,8 @@ export function useTurnstile(action: string) {
           callback: (newToken: string) => setToken(newToken),
           'expired-callback': () => setToken(null),
           'error-callback': () => setToken(null),
+          'before-interactive-callback': () => setNeedsClick(true),
+          'after-interactive-callback': () => setNeedsClick(false),
         })
       })
       .catch(() => setToken(null))
@@ -76,5 +81,5 @@ export function useTurnstile(action: string) {
     }
   }, [])
 
-  return { container, token, reset }
+  return { container, token, needsClick, reset }
 }

@@ -1,12 +1,25 @@
 import { useEffect, useRef, useState, type SubmitEvent } from 'react'
 import type { AdsResponse, AnalyzeResponse } from '../worker/types.ts'
-import { AdCard, AdForm, AdOffer, AdStrip, type AdScore } from './AdSlots.tsx'
+import {
+  AdCard,
+  AdEmptyCard,
+  AdForm,
+  AdPlaceholder,
+  AdStrip,
+  ScoreOffer,
+  type AdScore,
+} from './AdSlots.tsx'
 import { analyzeProfile, fetchAds } from './api.ts'
 import CvPicker, { type PickedCv } from './CvPicker.tsx'
 import LarpMeter from './LarpMeter.tsx'
 import LoadingPhrase from './LoadingPhrase.tsx'
+import ShareSheet from './ShareSheet.tsx'
 import { CONTACT_EMAIL } from './Terms.tsx'
 import { useTurnstile } from './useTurnstile.ts'
+import Verdict from './Verdict.tsx'
+
+const PLACEHOLDERS_PER_COLUMN = 2
+const AUTHOR_URL = 'https://simon-mounier.com'
 
 // Reads ?ad=success once when Stripe sends the buyer back, then cleans the URL.
 function readPaymentReturn(): 'success' | null {
@@ -19,6 +32,21 @@ function readPaymentReturn(): 'success' | null {
   return status === 'success' ? 'success' : null
 }
 
+// The bottom of the page: the links, and who built it.
+function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <nav className="footer-links">
+        <a href="/terms">[terms]</a>
+        <a href={`mailto:${CONTACT_EMAIL}`}>[contact]</a>
+        <a className="built-by" href={AUTHOR_URL} target="_blank" rel="noopener">
+          built by <span>jeune sim</span>
+        </a>
+      </nav>
+    </footer>
+  )
+}
+
 // The page: the form, the LARP meter, the verdict, and ad slots around them.
 export default function App() {
   const [github, setGithub] = useState('')
@@ -27,12 +55,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [hint, setHint] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [adSettings, setAdSettings] = useState<AdsResponse | null>(null)
+  const [adSettings, setAdSettings] = useState<AdsResponse | null | undefined>(undefined)
   const [buyingAd, setBuyingAd] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const [paymentReturn] = useState(readPaymentReturn)
   const githubInput = useRef<HTMLInputElement>(null)
-  const { container: humanCheckBox, token: humanToken, reset: resetHumanCheck } =
-    useTurnstile('analyze')
+  const {
+    container: humanCheckBox,
+    token: humanToken,
+    needsClick: humanCheckNeedsClick,
+    reset: resetHumanCheck,
+  } = useTurnstile('analyze')
 
   useEffect(() => {
     fetchAds()
@@ -82,70 +115,83 @@ export default function App() {
     githubInput.current?.focus()
   }
 
-  const slots = adSettings?.slots ?? 0
+  const adsLoading = adSettings === undefined
   const ads = adSettings?.ads ?? []
-  const freeSlots = Math.max(0, slots - ads.length)
-  const half = Math.ceil(slots / 2)
-  const cards = adSettings
-    ? Array.from({ length: slots }, (_, index) => (
-        <AdCard
-          key={index}
-          ad={ads[index]}
-          settings={adSettings}
-          freeSlots={freeSlots}
-          onBuy={openAdForm}
-        />
+  const freeSlots = Math.max(0, (adSettings?.slots ?? 0) - ads.length)
+
+  // Fills one side column: every other ad, then one free spot if any is left.
+  function adColumn(side: 0 | 1) {
+    if (adsLoading) {
+      return Array.from({ length: PLACEHOLDERS_PER_COLUMN }, (_, index) => (
+        <AdPlaceholder key={index} />
       ))
-    : []
+    }
+    const cards = ads
+      .filter((_, index) => index % 2 === side)
+      .map((ad, index) => <AdCard key={index} ad={ad} />)
+    if (adSettings && freeSlots > 0) {
+      cards.push(<AdEmptyCard key="free" settings={adSettings} onBuy={openAdForm} />)
+    }
+    return cards
+  }
 
   return (
     <div className="app">
       {adSettings && (
-        <AdStrip
-          ads={ads}
-          settings={adSettings}
-          position="top"
-          onBuy={openAdForm}
-        />
+        <AdStrip ads={ads} settings={adSettings} position="top" onBuy={openAdForm} />
       )}
+      {adsLoading && <div className="ticker ticker-top" aria-hidden="true" />}
 
       <div className="layout">
         <aside className="ads" aria-label="Ads">
-          {cards.slice(0, half)}
+          <p className="ads-label">Sponsored</p>
+          {adColumn(0)}
         </aside>
 
         <main className="page">
           {paymentReturn && (
             <p className="banner" role="status">
-              Payment received. Your profile shows up here within a minute.
+              Payment received. Your ad shows up here within a minute.
             </p>
           )}
 
           <header className="hero">
             <h1>
-              sharp<span>-or-</span>larp
+              Sharp <span>or</span> Larp
             </h1>
             <p className="tagline">
               Drop a GitHub link or a CV. Find out if they're sharp or larping.
             </p>
           </header>
 
-          <form className="search" onSubmit={handleSubmit}>
+          <form className="search" role="search" autoComplete="off" onSubmit={handleSubmit}>
             <div className="search-row">
               <input
                 ref={githubInput}
                 value={github}
                 onChange={(event) => setGithub(event.target.value)}
-                placeholder="github.com/username"
-                aria-label="GitHub link"
+                name="github-profile"
+                type="text"
+                inputMode="url"
+                placeholder="github.com/torvalds"
+                aria-label="GitHub profile link"
                 maxLength={200}
+                autoComplete="off"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                data-1p-ignore
+                data-lpignore="true"
               />
               <button type="submit" disabled={loading}>
-                {loading ? 'Checking…' : 'Check'}
+                {loading ? 'Checking…' : 'Check ->'}
               </button>
             </div>
             <CvPicker cv={cv} disabled={loading} onChange={setCv} onError={setError} />
-            <div ref={humanCheckBox} className="human-check" />
+            <div
+              ref={humanCheckBox}
+              className={humanCheckNeedsClick ? 'human-check open' : 'human-check'}
+            />
           </form>
 
           {error && (
@@ -167,64 +213,24 @@ export default function App() {
 
           {loading && <LoadingPhrase />}
 
-          {result && verdict && (
-            <section className="verdict">
-              <div className="profile">
-                {result.login && result.avatarUrl ? (
-                  <>
-                    <img src={result.avatarUrl} alt="" width={56} height={56} />
-                    <a href={`https://github.com/${result.login}`} target="_blank" rel="noreferrer">
-                      @{result.login}
-                    </a>
-                  </>
-                ) : (
-                  <span className="kicker">Judged on the CV only</span>
-                )}
-              </div>
+          {result && <Verdict result={result} />}
 
-              <blockquote className="roast">{verdict.roast}</blockquote>
-
-              <div className="flags">
-                <div className="flags-red">
-                  <h2 className="kicker">Red flags</h2>
-                  <ul>
-                    {verdict.redFlags.map((flag) => (
-                      <li key={flag}>{flag}</li>
-                    ))}
-                    {verdict.redFlags.length === 0 && <li className="muted">None found</li>}
-                  </ul>
-                </div>
-                <div className="flags-green">
-                  <h2 className="kicker">Green flags</h2>
-                  <ul>
-                    {verdict.greenFlags.map((flag) => (
-                      <li key={flag}>{flag}</li>
-                    ))}
-                    {verdict.greenFlags.length === 0 && <li className="muted">None found</li>}
-                  </ul>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {score && adSettings && (
-            <AdOffer
-              score={score}
-              settings={adSettings}
-              freeSlots={freeSlots}
+          {verdict && (
+            <ScoreOffer
+              larpPercent={verdict.larpPercent}
+              settings={adSettings ?? null}
+              canPlaceAd={score !== null && freeSlots > 0}
               onBuy={openAdForm}
+              onShare={() => setSharing(true)}
             />
           )}
 
-          <footer className="site-footer">
-            <a href="/terms">Terms & refunds</a>
-            <span aria-hidden="true">·</span>
-            <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
-          </footer>
+          <SiteFooter />
         </main>
 
         <aside className="ads" aria-label="Ads">
-          {cards.slice(half)}
+          <p className="ads-label">Sponsored</p>
+          {adColumn(1)}
         </aside>
       </div>
 
@@ -240,6 +246,8 @@ export default function App() {
       {buyingAd && adSettings && score && (
         <AdForm score={score} settings={adSettings} onClose={() => setBuyingAd(false)} />
       )}
+
+      {sharing && result && <ShareSheet result={result} onClose={() => setSharing(false)} />}
     </div>
   )
 }

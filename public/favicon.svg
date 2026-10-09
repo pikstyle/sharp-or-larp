@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#121110"/>
+  <rect width="64" height="64" rx="14" fill="#0a0a0a"/>
   <g fill="none" stroke-width="11">
-    <path d="M 13.01 40.47 A 19 19 0 0 1 16.32 30.27" stroke="#4f9d5d"/>
-    <path d="M 16.95 29.41 A 19 19 0 0 1 25.63 23.10" stroke="#d8b64a"/>
-    <path d="M 26.64 22.77 A 19 19 0 0 1 37.36 22.77" stroke="#d98a3a"/>
-    <path d="M 38.37 23.10 A 19 19 0 0 1 47.05 29.41" stroke="#c9483c"/>
-    <path d="M 47.68 30.27 A 19 19 0 0 1 50.99 40.47" stroke="#7e1f2e"/>
+    <path d="M 13.01 40.47 A 19 19 0 0 1 16.32 30.27" stroke="#3ddc84"/>
+    <path d="M 16.95 29.41 A 19 19 0 0 1 25.63 23.10" stroke="#b5e550"/>
+    <path d="M 26.64 22.77 A 19 19 0 0 1 37.36 22.77" stroke="#f5c542"/>
+    <path d="M 38.37 23.10 A 19 19 0 0 1 47.05 29.41" stroke="#ff8a3d"/>
+    <path d="M 47.68 30.27 A 19 19 0 0 1 50.99 40.47" stroke="#ff3d5a"/>
   </g>
-  <polygon points="42.60 21.72 29.20 39.46 34.80 42.54" fill="#ebe5d9"/>
-  <circle cx="32" cy="41" r="5.5" fill="#ebe5d9"/>
-  <circle cx="32" cy="41" r="2.2" fill="#121110"/>
+  <polygon points="42.60 21.72 29.20 39.46 34.80 42.54" fill="#ededed"/>
+  <circle cx="32" cy="41" r="5.5" fill="#ededed"/>
+  <circle cx="32" cy="41" r="2.2" fill="#0a0a0a"/>
 </svg>

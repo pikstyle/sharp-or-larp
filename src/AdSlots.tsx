@@ -1,14 +1,25 @@
-import { useState, type SubmitEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import type { Ad, AdsResponse, AdText } from '../worker/types.ts'
+import { toAdImage } from './adImage.ts'
 import { startAdCheckout } from './api.ts'
 import { larpZone } from './zones.ts'
 
 const MIN_TICKER_ITEMS = 6
+const SPONSORED = 'noopener noreferrer nofollow sponsored'
 
 export type AdScore = {
   checkId: string
   larpPercent: number
   githubLogin: string | null
+}
+
+// Names where an ad leads: LinkedIn, GitHub, or the site's own address.
+function linkLabel(url: string): string {
+  const host = new URL(url).hostname.replace(/^www\./, '')
+  if (host.endsWith('linkedin.com')) {
+    return 'LinkedIn'
+  }
+  return host === 'github.com' ? 'GitHub' : host
 }
 
 type ScoreTagProps = {
@@ -23,48 +34,59 @@ function ScoreTag({ larpPercent, githubLogin, className }: ScoreTagProps) {
     return null
   }
   return (
-    <span className={className} style={{ color: larpZone(larpPercent).ink }}>
+    <span className={className} style={{ color: larpZone(larpPercent).color }}>
       {larpPercent}% larp · {githubLogin ? `@${githubLogin}` : 'from a CV'}
     </span>
   )
 }
 
 type CardProps = {
-  ad: Ad | undefined
+  ad: Ad
+}
+
+// One running ad in a side column: who, what they do, their score, their link.
+export function AdCard({ ad }: CardProps) {
+  return (
+    <a className="ad-card" href={ad.url} target="_blank" rel={SPONSORED}>
+      <span className="ad-card-head">
+        {ad.imageUrl ? (
+          <img src={ad.imageUrl} alt="" width={36} height={36} />
+        ) : (
+          <span className="ad-card-initial" aria-hidden="true">
+            {ad.name.slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        <span className="ad-card-who">
+          <strong>{ad.name}</strong>
+          <span className="ad-card-link">{linkLabel(ad.url)} -&gt;</span>
+        </span>
+      </span>
+      <span className="ad-card-headline">{ad.headline}</span>
+      <ScoreTag {...ad} className="ad-card-score" />
+    </a>
+  )
+}
+
+type EmptyCardProps = {
   settings: AdsResponse
-  freeSlots: number
   onBuy: () => void
 }
 
-// One ad in the side columns, or an empty spot to place one.
-export function AdCard({ ad, settings, freeSlots, onBuy }: CardProps) {
-  if (ad) {
-    return (
-      <a
-        className="classified"
-        href={ad.linkedinUrl}
-        target="_blank"
-        rel="noopener noreferrer nofollow sponsored"
-      >
-        <ScoreTag {...ad} className="classified-kicker" />
-        <strong className="classified-name">{ad.name}</strong>
-        <span className="classified-headline">{ad.headline}</span>
-        <span className="classified-link">LinkedIn →</span>
-      </a>
-    )
-  }
-
+// The free spot at the end of a column, to place an ad.
+export function AdEmptyCard({ settings, onBuy }: EmptyCardProps) {
   return (
-    <button type="button" className="classified classified-empty" onClick={onBuy}>
-      <span className="classified-kicker">Your ad here</span>
-      <strong className="classified-name">Looking for a job?</strong>
-      <span className="classified-headline">
-        {freeSlots} of {settings.slots} spots left · ${settings.priceUsd} for {settings.days}{' '}
-        days
+    <button type="button" className="ad-card ad-card-empty" onClick={onBuy}>
+      <strong>+ Your ad here</strong>
+      <span>
+        Your score next to your link. ${settings.priceUsd} for {settings.days} days.
       </span>
-      <span className="classified-link">Place an ad →</span>
     </button>
   )
+}
+
+// An empty card that holds the ad's place until the ads have loaded.
+export function AdPlaceholder() {
+  return <div className="ad-card ad-card-placeholder" aria-hidden="true" />
 }
 
 type TickerProps = {
@@ -94,13 +116,14 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
         <a
           key={`${copy}-${index}`}
           className="ticker-item"
-          href={ad.linkedinUrl}
+          href={ad.url}
           target="_blank"
-          rel="noopener noreferrer nofollow sponsored"
+          rel={SPONSORED}
           tabIndex={copy === 0 ? 0 : -1}
         >
+          {ad.imageUrl && <img src={ad.imageUrl} alt="" width={20} height={20} />}
           <ScoreTag {...ad} className="ticker-tag" />
-          <strong>{ad.name}</strong> — {ad.headline}
+          <strong>{ad.name}</strong> {ad.headline}
         </a>
       ) : (
         <button
@@ -110,7 +133,7 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           onClick={onBuy}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <span className="ticker-tag">Your ad here</span>${settings.priceUsd} for{' '}
+          <span className="ticker-tag">[ Your ad here ]</span>${settings.priceUsd} for{' '}
           {settings.days} days
         </button>
       ),
@@ -129,33 +152,104 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
 }
 
 type OfferProps = {
-  score: AdScore
-  settings: AdsResponse
-  freeSlots: number
+  larpPercent: number
+  settings: AdsResponse | null
+  canPlaceAd: boolean
   onBuy: () => void
+  onShare: () => void
 }
 
-// Invites the person just checked to put their score next to their LinkedIn.
-export function AdOffer({ score, settings, freeSlots, onBuy }: OfferProps) {
-  const zone = larpZone(score.larpPercent)
+// Under the verdict: show the score off with an ad, or share the score card.
+export function ScoreOffer({ larpPercent, settings, canPlaceAd, onBuy, onShare }: OfferProps) {
+  const zone = larpZone(larpPercent)
+  const score = <strong style={{ color: zone.color }}>{larpPercent}% larp</strong>
 
   return (
-    <section className="ad-offer">
+    <section className="offer">
       <p className="kicker">Is this you?</p>
-      <h2>{score.larpPercent < 40 ? 'Sharp. Show it off.' : 'Own the larp.'}</h2>
-      <p>
-        Put your <strong style={{ color: zone.ink }}>{score.larpPercent}% larp</strong> next to
-        your LinkedIn, in front of everyone checking profiles here. ${settings.priceUsd} for{' '}
-        {settings.days} days.
-      </p>
-      {freeSlots > 0 ? (
-        <button type="button" onClick={onBuy}>
-          Place my ad
-        </button>
+      <h2>{larpPercent < 40 ? 'Sharp. Show it off.' : 'Own the larp.'}</h2>
+      {canPlaceAd && settings ? (
+        <p>
+          Put your {score} next to your LinkedIn, your startup or your site (${settings.priceUsd}{' '}
+          for {settings.days} days), or share the score card.
+        </p>
       ) : (
-        <p className="muted">Every spot is taken right now. Come back in a few days.</p>
+        <p>Share your {score}: a card with the score, the meter and the roast.</p>
       )}
+      <div className="offer-actions">
+        {canPlaceAd && (
+          <button type="button" onClick={onBuy}>
+            Place my ad
+          </button>
+        )}
+        <button type="button" onClick={onShare}>
+          Share
+        </button>
+      </div>
     </section>
+  )
+}
+
+type ImagePickerProps = {
+  image: string | null
+  disabled: boolean
+  onChange: (image: string | null) => void
+  onError: (message: string | null) => void
+}
+
+// Picks the ad's optional image, shrinks it, and shows it with a × to remove it.
+function AdImagePicker({ image, disabled, onChange, onError }: ImagePickerProps) {
+  const [reading, setReading] = useState(false)
+
+  // Turns the chosen file into a small square JPEG.
+  async function handleFile(file: File | undefined) {
+    if (!file) {
+      return
+    }
+    setReading(true)
+    onError(null)
+    try {
+      onChange(await toAdImage(file))
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setReading(false)
+    }
+  }
+
+  return (
+    <div className="ad-image">
+      {image ? (
+        <img src={`data:image/jpeg;base64,${image}`} alt="Your ad's image" width={56} height={56} />
+      ) : (
+        <span className="ad-image-empty" aria-hidden="true">
+          +
+        </span>
+      )}
+      <label className="ad-image-pick">
+        <input
+          type="file"
+          accept="image/*"
+          disabled={disabled || reading}
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            handleFile(file)
+          }}
+        />
+        {reading ? 'Reading…' : image ? 'Change image' : 'Add a logo or photo'}
+      </label>
+      {image && (
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => onChange(null)}
+          disabled={disabled}
+        >
+          Remove
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -167,10 +261,22 @@ type FormProps = {
 
 // The form to place an ad with a check's score: it sends the visitor to Stripe.
 export function AdForm({ score, settings, onClose }: FormProps) {
-  const [ad, setAd] = useState<AdText>({ name: '', headline: '', linkedinUrl: '' })
+  const [ad, setAd] = useState<AdText>({ name: '', headline: '', url: '' })
+  const [image, setImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const zone = larpZone(score.larpPercent)
+
+  useEffect(() => {
+    // Closes the form when Escape is pressed.
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
 
   // Creates the Stripe payment page and moves the visitor there.
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
@@ -179,7 +285,7 @@ export function AdForm({ score, settings, onClose }: FormProps) {
     setError(null)
 
     try {
-      const { url } = await startAdCheckout({ ...ad, checkId: score.checkId })
+      const { url } = await startAdCheckout({ ...ad, checkId: score.checkId, imageJpeg: image })
       window.location.assign(url)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
@@ -189,11 +295,16 @@ export function AdForm({ score, settings, onClose }: FormProps) {
 
   return (
     <div className="overlay" role="dialog" aria-modal="true" aria-labelledby="ad-form-title">
-      <form className="ad-form" onSubmit={handleSubmit}>
-        <h2 id="ad-form-title">Place your ad</h2>
+      <form className="sheet ad-form" onSubmit={handleSubmit}>
+        <div className="sheet-head">
+          <h2 id="ad-form-title">Place your ad</h2>
+          <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </div>
 
         <div className="ad-form-score">
-          <strong style={{ color: zone.ink }}>{score.larpPercent}% larp</strong>
+          <strong style={{ color: zone.color }}>{score.larpPercent}% larp</strong>
           <span>
             {score.githubLogin ? `@${score.githubLogin}` : 'From your CV'} · comes from your
             check, can't be edited
@@ -201,8 +312,8 @@ export function AdForm({ score, settings, onClose }: FormProps) {
         </div>
 
         <p className="ad-form-intro">
-          ${settings.priceUsd} for {settings.days} days. Your name, your score and your LinkedIn
-          sit next to every check, in front of students and recruiters.
+          ${settings.priceUsd} for {settings.days} days. Your name, your score and your link sit
+          next to every check, in front of students, founders and recruiters.
         </p>
 
         <label>
@@ -210,6 +321,7 @@ export function AdForm({ score, settings, onClose }: FormProps) {
           <input
             value={ad.name}
             onChange={(event) => setAd({ ...ad, name: event.target.value })}
+            placeholder="Your name or your startup's"
             maxLength={40}
             required
           />
@@ -225,16 +337,27 @@ export function AdForm({ score, settings, onClose }: FormProps) {
           />
         </label>
         <label>
-          LinkedIn profile
+          Link
           <input
-            type="url"
-            value={ad.linkedinUrl}
-            onChange={(event) => setAd({ ...ad, linkedinUrl: event.target.value })}
-            placeholder="https://www.linkedin.com/in/your-name"
+            value={ad.url}
+            onChange={(event) => setAd({ ...ad, url: event.target.value })}
+            placeholder="linkedin.com/in/you, your startup, your site"
             maxLength={200}
+            inputMode="url"
+            autoCapitalize="none"
+            spellCheck={false}
             required
           />
         </label>
+        <div className="ad-form-field">
+          <span>Image (optional)</span>
+          <AdImagePicker
+            image={image}
+            disabled={sending}
+            onChange={setImage}
+            onError={setError}
+          />
+        </div>
 
         {error && (
           <p className="error" role="alert">

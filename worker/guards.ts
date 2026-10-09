@@ -11,6 +11,7 @@ type SiteverifyResult = {
   success?: boolean
   action?: string
   hostname?: string
+  metadata?: { result_with_testing_key?: boolean }
 }
 
 // Identifies a visitor by the IP address Cloudflare saw them come from.
@@ -63,12 +64,13 @@ async function isHuman(c: AppContext, token: unknown, action: string): Promise<b
     signal: AbortSignal.timeout(SITEVERIFY_TIMEOUT_MS),
   }).catch(() => null)
   const result = await response?.json<SiteverifyResult>().catch(() => null)
+  const hostname = new URL(c.req.url).hostname
+  const isLocalTest = hostname === 'localhost' && result?.metadata?.result_with_testing_key === true
 
   return (
     response?.ok === true &&
     result?.success === true &&
-    result.action === action &&
-    result.hostname === new URL(c.req.url).hostname
+    (isLocalTest || (result.action === action && result.hostname === hostname))
   )
 }
 

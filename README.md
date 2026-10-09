@@ -19,7 +19,7 @@ STRIPE_SECRET_KEY="sk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 ```
 
-`GITHUB_TOKEN` needs read-only access to public data. The Stripe keys are only needed for ads.
+`GITHUB_TOKEN` needs read-only access to public data. The Stripe keys are only needed for ads. Locally, use Cloudflare's test secret `TURNSTILE_SECRET="1x0000000000000000000000000000000AA"`.
 
 ```bash
 npm install
@@ -33,11 +33,17 @@ Open `http://localhost:5173`. To test ad payments, forward Stripe's webhooks wit
 
 ```
 src/                React front
-├── App.tsx         The page: form, meter, verdict, ad slots
-├── LarpMeter.tsx   The gauge
+├── App.tsx         The page: form, meter, verdict, ad slots, footer
+├── LarpMeter.tsx   The dial
+├── gauge.ts        The dial's geometry, shared with the share card
+├── halftone.ts     Draws the halftone dots on the share card
+├── Verdict.tsx     Roast, red and green flags, share button
+├── ShareSheet.tsx  Share the score: LinkedIn, phone share menu, download
+├── shareCard.ts    Draws the score card image in the browser
 ├── LoadingPhrase.tsx  Rotating "Cooking…" lines while it checks
 ├── CvPicker.tsx    Picks the CV, rejects non-CVs right away, × to remove it
 ├── AdSlots.tsx     Ads with their score, the "place my ad" offer, the buy form
+├── adImage.ts      Shrinks an ad's image to a small square JPEG
 ├── zones.ts        The 5 LARP zones and their colors
 ├── readCv.ts       Reads a PDF CV in the browser
 ├── useTurnstile.ts Cloudflare's bot check on the form
@@ -54,8 +60,10 @@ worker/             API server (Cloudflare Worker)
 ├── score.ts        Scores the numbers, then blends in the LLM's gut feeling
 ├── judge.ts        Asks Claude Haiku for its gut feeling on the texts
 ├── checks.ts       Saves each score, so an ad can show it untouched
-├── ads.ts          Ad slots, Stripe checkout and webhook
+├── ads.ts          Ad slots, images, Stripe checkout and webhook
 └── types.ts        Shapes shared with the front, and ApiError
 migrations/         Database tables (D1)
+public/fonts/       Inter and IBM Plex Mono, self-hosted
+public/og.png       Link preview image
 public/_headers     Security headers for the site (CSP…)
 ```

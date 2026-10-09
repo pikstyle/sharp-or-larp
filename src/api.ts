@@ -18,7 +18,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   bot_check_failed: "We couldn't confirm you're human. Reload the page and try again.",
   too_many_requests: 'Easy there. Wait a minute before checking someone else.',
   llm_failed: 'The LARP meter jammed. Try again.',
-  invalid_ad: 'Check the fields: a linkedin.com/in/ link, a name and a short headline.',
+  invalid_ad: 'Check the fields: a name, a short headline and a working link.',
   check_expired: 'Your result has expired. Run the check again, then place your ad.',
   ads_sold_out: 'Every ad slot is taken right now. Come back in a few days.',
   stripe_failed: 'Payment is unavailable right now. Try again later.',

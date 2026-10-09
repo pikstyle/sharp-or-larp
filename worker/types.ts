@@ -102,16 +102,18 @@ export type AnalyzeResponse = {
 export type AdText = {
   name: string
   headline: string
-  linkedinUrl: string
+  url: string
 }
 
 export type Ad = AdText & {
   larpPercent: number | null
   githubLogin: string | null
+  imageUrl: string | null
 }
 
 export type AdRequest = AdText & {
   checkId: string
+  imageJpeg: string | null
 }
 
 export type AdsResponse = {

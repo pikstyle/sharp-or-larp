@@ -1,10 +1,14 @@
+import { dialTicks, pointAt, zoneDegrees } from './gauge.ts'
 import { larpZone, ZONES } from './zones.ts'
 
-const CENTER_X = 170
-const CENTER_Y = 170
-const RADIUS = 130
-const BAND_WIDTH = 52
-const NEEDLE_LENGTH = 120
+const CX = 170
+const CY = 176
+const TICK_OUTER = 148
+const TICK_INNER = 114
+const MAJOR_TICK_INNER = 106
+const LABEL_RADIUS = 162
+const NEEDLE_LENGTH = 116
+const TICKS = dialTicks()
 
 type Props = {
   percent: number
@@ -12,48 +16,57 @@ type Props = {
   showReading: boolean
 }
 
-// Gives the point on the dial at this radius and angle (180° is far left).
-function pointAt(radius: number, degrees: number): string {
-  const radians = (degrees * Math.PI) / 180
-  return `${CENTER_X + radius * Math.cos(radians)} ${CENTER_Y - radius * Math.sin(radians)}`
+// Draws the arc a zone's label runs along, left to right so it reads upright.
+function labelArc(index: number): string {
+  const { from, to } = zoneDegrees(index)
+  const start = pointAt(CX, CY, LABEL_RADIUS, from)
+  const end = pointAt(CX, CY, LABEL_RADIUS, to)
+  return `M ${start.x} ${start.y} A ${LABEL_RADIUS} ${LABEL_RADIUS} 0 0 1 ${end.x} ${end.y}`
 }
 
-// Draws the arc of one zone, left to right, so its label reads upright.
-function zoneArc(index: number): string {
-  const from = 180 - index * 36 - 0.4
-  const to = 180 - (index + 1) * 36 + 0.4
-  return `M ${pointAt(RADIUS, from)} A ${RADIUS} ${RADIUS} 0 0 1 ${pointAt(RADIUS, to)}`
-}
-
-// The LARP meter: five colored zones and a needle that swings to the score.
+// The LARP meter: thick ticks that light up to the score, and a needle.
 export default function LarpMeter({ percent, searching, showReading }: Props) {
   const zone = larpZone(percent)
   const label = showReading ? `LARP meter: ${percent}% larp, ${zone.name}` : 'LARP meter'
 
   return (
     <figure className="meter">
-      <svg viewBox="0 0 340 196" role="img" aria-label={label}>
+      <svg viewBox="-12 -16 364 212" role="img" aria-label={label}>
         <defs>
           {ZONES.map((_, index) => (
-            <path key={index} id={`zone-${index}`} d={zoneArc(index)} />
+            <path key={index} id={`zone-label-${index}`} d={labelArc(index)} />
           ))}
         </defs>
 
-        {ZONES.map((current, index) => (
-          <g key={current.name}>
-            <use
-              href={`#zone-${index}`}
-              fill="none"
-              stroke={current.color}
-              strokeWidth={BAND_WIDTH}
-              opacity={showReading && current !== zone ? 0.45 : 1}
+        {TICKS.map((tick, index) => {
+          const outer = pointAt(CX, CY, TICK_OUTER, tick.degrees)
+          const inner = pointAt(CX, CY, tick.major ? MAJOR_TICK_INNER : TICK_INNER, tick.degrees)
+          const lit = showReading && tick.percent <= percent
+          return (
+            <line
+              key={tick.percent}
+              className={lit ? 'tick lit' : 'tick'}
+              x1={inner.x}
+              y1={inner.y}
+              x2={outer.x}
+              y2={outer.y}
+              stroke={larpZone(tick.percent).color}
+              strokeWidth={tick.major ? 6.5 : 5}
+              style={lit ? { transitionDelay: `${index * 16}ms` } : undefined}
             />
-            <text className="zone-label" fill={current.text} dy="4">
-              <textPath href={`#zone-${index}`} startOffset="50%" textAnchor="middle">
-                {current.name}
-              </textPath>
-            </text>
-          </g>
+          )
+        })}
+
+        {ZONES.map((current, index) => (
+          <text
+            key={current.name}
+            className={showReading && current === zone ? 'zone-label active' : 'zone-label'}
+            fill={showReading && current === zone ? current.color : undefined}
+          >
+            <textPath href={`#zone-label-${index}`} startOffset="50%" textAnchor="middle">
+              {current.name}
+            </textPath>
+          </text>
         ))}
 
         <g
@@ -61,17 +74,16 @@ export default function LarpMeter({ percent, searching, showReading }: Props) {
           style={{ transform: `rotate(${percent * 1.8}deg)` }}
         >
           <polygon
-            points={`${CENTER_X - NEEDLE_LENGTH},${CENTER_Y} ${CENTER_X},${CENTER_Y - 7} ${CENTER_X},${CENTER_Y + 7}`}
+            points={`${CX - NEEDLE_LENGTH},${CY} ${CX + 14},${CY - 6} ${CX + 14},${CY + 6}`}
           />
         </g>
-        <circle className="needle-hub" cx={CENTER_X} cy={CENTER_Y} r="16" />
-        <circle className="needle-pin" cx={CENTER_X} cy={CENTER_Y} r="6" />
+        <circle className="needle-hub" cx={CX} cy={CY} r="13" />
+        <circle className="needle-pin" cx={CX} cy={CY} r="4.5" />
       </svg>
 
       {showReading && (
         <figcaption className="meter-reading">
-          <strong style={{ color: zone.ink }}>{percent}%</strong>
-          <span>larp · {zone.name}</span>
+          <strong style={{ color: zone.color }}>{percent}%</strong>
         </figcaption>
       )}
     </figure>
