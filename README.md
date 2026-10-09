@@ -1,4 +1,4 @@
-# sharp-or-larp
+# Sharp or Larp
 
 Drop a GitHub link, a CV, or both. The LARP meter tells you if they're sharp or larping.
 
