@@ -2,6 +2,7 @@ import { useEffect, useState, type SubmitEvent } from 'react'
 import type { Ad, AdsResponse, AdText } from '../worker/types.ts'
 import { toAdImage } from './adImage.ts'
 import { startAdCheckout } from './api.ts'
+import { useTurnstile } from './useTurnstile.ts'
 import { larpZone } from './zones.ts'
 
 const MIN_TICKER_ITEMS = 6
@@ -266,6 +267,12 @@ export function AdForm({ score, settings, onClose }: FormProps) {
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const zone = larpZone(score.larpPercent)
+  const {
+    container: humanCheckBox,
+    token: humanToken,
+    needsClick: humanCheckNeedsClick,
+    reset: resetHumanCheck,
+  } = useTurnstile('checkout')
 
   useEffect(() => {
     // Closes the form when Escape is pressed.
@@ -281,15 +288,21 @@ export function AdForm({ score, settings, onClose }: FormProps) {
   // Creates the Stripe payment page and moves the visitor there.
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!humanToken) {
+      setError("Still checking you're not a bot. Try again in a second.")
+      return
+    }
     setSending(true)
     setError(null)
 
     try {
-      const { url } = await startAdCheckout({ ...ad, checkId: score.checkId, imageJpeg: image })
+      const request = { ...ad, checkId: score.checkId, imageJpeg: image }
+      const { url } = await startAdCheckout(request, humanToken)
       window.location.assign(url)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
       setSending(false)
+      resetHumanCheck()
     }
   }
 
@@ -358,6 +371,11 @@ export function AdForm({ score, settings, onClose }: FormProps) {
             onError={setError}
           />
         </div>
+
+        <div
+          ref={humanCheckBox}
+          className={humanCheckNeedsClick ? 'human-check open' : 'human-check'}
+        />
 
         {error && (
           <p className="error" role="alert">

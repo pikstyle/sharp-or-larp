@@ -8,6 +8,7 @@ import {
   limitAnalyses,
   limitApiCalls,
   limitCheckouts,
+  limitGlobalAnalyses,
   requireHuman,
   requireOwnSiteJson,
 } from './guards.ts'
@@ -17,13 +18,16 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.use('/api/*', secureHeaders())
 
+// Guards run in order: the cheap per-visitor caps first, then the bot check, and only then the
+// global caps, so that bots can't exhaust the quota shared by real visitors.
 app.post(
   '/api/analyze',
   limitApiCalls,
   requireOwnSiteJson,
   bodyLimit({ maxSize: 128 * 1024, onError: bodyTooLarge }),
   limitAnalyses,
-  requireHuman,
+  requireHuman('analyze'),
+  limitGlobalAnalyses,
   analyze,
 )
 app.get('/api/ads', limitApiCalls, listAds)
@@ -34,6 +38,7 @@ app.post(
   requireOwnSiteJson,
   bodyLimit({ maxSize: 160 * 1024, onError: bodyTooLarge }),
   limitCheckouts,
+  requireHuman('checkout'),
   createAdCheckout,
 )
 app.post(

@@ -24,16 +24,21 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Per-visitor caps are keyed by IP (IPv6 by /64 block). A campus, an office or a phone carrier
+  // shares one IP between many people, so these stay generous: a page load makes up to 9 API calls
+  // (the ads plus their images), and one person can't run more than a few analyses a minute anyway.
+  // The global cap is counted per Cloudflare location; the real cap on the bill is the daily
+  // budget in worker/budget.ts, counted once in D1.
   "ratelimits": [
     {
       "name": "API_LIMITER",
       "namespace_id": "1001",
-      "simple": { "limit": 60, "period": 60 }
+      "simple": { "limit": 300, "period": 60 }
     },
     {
       "name": "ANALYZE_LIMITER",
       "namespace_id": "1002",
-      "simple": { "limit": 5, "period": 60 }
+      "simple": { "limit": 20, "period": 60 }
     },
     {
       "name": "GLOBAL_ANALYZE_LIMITER",

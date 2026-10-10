@@ -17,6 +17,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_a_cv: "That PDF doesn't look like a CV. Try a CV or a LinkedIn PDF export.",
   bot_check_failed: "We couldn't confirm you're human. Reload the page and try again.",
   too_many_requests: 'Easy there. Wait a minute before checking someone else.',
+  daily_limit_reached: "Today's checks are all used up. The LARP meter is back tomorrow.",
   llm_failed: 'The LARP meter jammed. Try again.',
   invalid_ad: 'Check the fields: a name, a short headline and a working link.',
   check_expired: 'Your result has expired. Run the check again, then place your ad.',
@@ -62,6 +63,6 @@ export function fetchAds() {
 }
 
 // Starts paying for an ad and returns the Stripe page to send the visitor to.
-export function startAdCheckout(ad: AdRequest) {
-  return postJson<AdCheckoutResponse>('/api/ads/checkout', ad)
+export function startAdCheckout(ad: AdRequest, turnstileToken: string) {
+  return postJson<AdCheckoutResponse>('/api/ads/checkout', { ...ad, turnstileToken })
 }

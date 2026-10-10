@@ -22,6 +22,7 @@ const NAME_MAX_CHARS = 40
 const HEADLINE_MAX_CHARS = 80
 const URL_MAX_CHARS = 200
 const IMAGE_MAX_BYTES = 100 * 1024
+const IMAGES_PER_CHECK = 3
 const UNUSED_IMAGE_MAX_AGE_MS = DAY_MS
 const SIGNATURE_TOLERANCE_S = 300
 const CHECKOUT_MINUTES = 31
@@ -144,21 +145,26 @@ async function postToStripe<T>(
   return body
 }
 
-// Keeps an ad's image until the ad runs, and clears images no ad uses.
-async function saveAdImage(db: D1Database, jpegBase64: string): Promise<string> {
+// Keeps an ad's image until the ad runs. Images no ad uses are cleared after a day, and one
+// check keeps only its last few, so retrying the form can't pile images up in the database.
+async function saveAdImage(db: D1Database, checkId: string, jpegBase64: string): Promise<string> {
   const id = crypto.randomUUID()
   const now = Date.now()
+  const inUse = 'SELECT image_id FROM ads WHERE image_id IS NOT NULL AND expires_at > ?'
 
   await db.batch([
     db
-      .prepare(
-        `DELETE FROM ad_images WHERE created_at < ? AND id NOT IN
-         (SELECT image_id FROM ads WHERE image_id IS NOT NULL AND expires_at > ?)`,
-      )
+      .prepare(`DELETE FROM ad_images WHERE created_at < ? AND id NOT IN (${inUse})`)
       .bind(now - UNUSED_IMAGE_MAX_AGE_MS, now),
     db
-      .prepare('INSERT INTO ad_images (id, jpeg_base64, created_at) VALUES (?, ?, ?)')
-      .bind(id, jpegBase64, now),
+      .prepare(
+        `DELETE FROM ad_images WHERE check_id = ? AND id NOT IN (${inUse}) AND id NOT IN
+         (SELECT id FROM ad_images WHERE check_id = ? ORDER BY created_at DESC LIMIT ?)`,
+      )
+      .bind(checkId, now, checkId, IMAGES_PER_CHECK - 1),
+    db
+      .prepare('INSERT INTO ad_images (id, jpeg_base64, created_at, check_id) VALUES (?, ?, ?, ?)')
+      .bind(id, jpegBase64, now, checkId),
   ])
   return id
 }
@@ -207,7 +213,7 @@ export async function createAdCheckout(c: AppContext) {
     throw new ApiError(409, 'ads_sold_out')
   }
 
-  const imageId = imageJpeg ? await saveAdImage(c.env.DB, imageJpeg) : null
+  const imageId = imageJpeg ? await saveAdImage(c.env.DB, checkId, imageJpeg) : null
   const ad: NewAd = { ...text, ...check, imageId }
   const origin = new URL(c.req.url).origin
   const response: AdCheckoutResponse = {

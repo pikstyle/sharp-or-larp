@@ -51,6 +51,7 @@ src/                React front
 worker/             API server (Cloudflare Worker)
 ├── main.ts         Route menu: which route runs what, behind which guards
 ├── guards.ts       Rate limits, same-site and bot checks
+├── budget.ts       The daily cap on analyses, counted in D1 for the whole site
 ├── analyze.ts      POST /api/analyze, step by step
 ├── github.ts       Fetches profile, repos and activity from GitHub
 ├── cvCheck.ts      Tells if a text reads like a CV (used by front and server)

@@ -1,4 +1,5 @@
 import type { Context, Next } from 'hono'
+import { takeDailyAnalysis } from './budget.ts'
 import { ApiError } from './types.ts'
 
 type AppContext = Context<{ Bindings: Env }>
@@ -6,6 +7,8 @@ type AppContext = Context<{ Bindings: Env }>
 const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 const SITEVERIFY_TIMEOUT_MS = 10_000
 const TOKEN_MAX_CHARS = 2048
+const IPV6_GROUPS = 8
+const IPV6_BLOCK_GROUPS = 4
 
 type SiteverifyResult = {
   success?: boolean
@@ -14,9 +17,24 @@ type SiteverifyResult = {
   metadata?: { result_with_testing_key?: boolean }
 }
 
-// Identifies a visitor by the IP address Cloudflare saw them come from.
+// Names the /64 block an IPv6 address belongs to. One home or one phone gets a whole block, so
+// counting per address would hand a single visitor billions of keys; counting per block does not.
+function ipv6Block(ip: string): string {
+  const [head, tail = ''] = ip.split('::')
+  const headGroups = head ? head.split(':') : []
+  const tailGroups = tail ? tail.split(':') : []
+  const missing = Math.max(0, IPV6_GROUPS - headGroups.length - tailGroups.length)
+  const groups = [...headGroups, ...Array<string>(missing).fill('0'), ...tailGroups]
+  const block = groups.slice(0, IPV6_BLOCK_GROUPS).map((group) => parseInt(group, 16).toString(16))
+  return `${block.join(':')}::/64`
+}
+
+// Identifies a visitor by the IP address Cloudflare saw them come from, IPv6 by /64 block.
+// A shared network (campus, office, phone carrier) shows up as one visitor: keep the per-visitor
+// caps generous and let the global caps protect the budget.
 function visitorKey(c: AppContext): string {
-  return c.req.header('cf-connecting-ip') ?? 'local'
+  const ip = c.req.header('cf-connecting-ip') ?? 'local'
+  return ip.includes(':') && !ip.includes('.') ? ipv6Block(ip) : ip
 }
 
 // Asks a rate limiter if this key may go on, or refuses with a 429.
@@ -34,10 +52,21 @@ export async function limitApiCalls(c: AppContext, next: Next) {
   await next()
 }
 
-// Caps analyses per visitor and in total, since each one costs an LLM call.
+// Caps analyses per visitor, so one person or one script can't hog the site.
 export async function limitAnalyses(c: AppContext, next: Next) {
   await enforce(c.env.ANALYZE_LIMITER, visitorKey(c))
+  await next()
+}
+
+// Caps analyses for everyone, since each one costs an LLM call: a burst brake per minute, then
+// a daily budget counted once for every Cloudflare location. Runs after the bot check, so that
+// requests without a valid Turnstile token can't use up the quota of real visitors.
+export async function limitGlobalAnalyses(c: AppContext, next: Next) {
   await enforce(c.env.GLOBAL_ANALYZE_LIMITER, 'all')
+
+  if (!(await takeDailyAnalysis(c.env.DB))) {
+    throw new ApiError(429, 'daily_limit_reached')
+  }
   await next()
 }
 
@@ -74,14 +103,16 @@ async function isHuman(c: AppContext, token: unknown, action: string): Promise<b
   )
 }
 
-// Lets an analysis through only with a fresh Turnstile token from our page.
-export async function requireHuman(c: AppContext, next: Next) {
-  const body = await c.req.json().catch(() => null)
+// Lets a request through only with a fresh Turnstile token from our page, made for this action.
+export function requireHuman(action: string) {
+  return async (c: AppContext, next: Next) => {
+    const body = await c.req.json().catch(() => null)
 
-  if (!(await isHuman(c, body?.turnstileToken, 'analyze'))) {
-    throw new ApiError(403, 'bot_check_failed')
+    if (!(await isHuman(c, body?.turnstileToken, action))) {
+      throw new ApiError(403, 'bot_check_failed')
+    }
+    await next()
   }
-  await next()
 }
 
 // Accepts only JSON sent by our own site, which blocks other sites' forms.

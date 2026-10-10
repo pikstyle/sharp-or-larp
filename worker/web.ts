@@ -1,6 +1,8 @@
 import type { LinkCheck, SiteVisit } from './types.ts'
 
 const PAGE_TIMEOUT_MS = 5000
+const PAGE_MAX_BYTES = 1024 * 1024
+const PAGE_LINKS_MAX = 300
 const PAGE_EXCERPT_MAX_CHARS = 1500
 const HOME_TEXT_MAX_CHARS = 2000
 const INNER_PAGE_TEXT_MAX_CHARS = 1200
@@ -23,7 +25,8 @@ type OpenedPage = {
   links: PageLink[]
 }
 
-// Turns "github.com/x" or "https://x.dev" into a URL, or null if it isn't web.
+// Turns "github.com/x" or "https://x.dev" into a URL, or null if it isn't a public web page:
+// http(s) only, a real domain name (no IP, no localhost), the standard port, no login in it.
 export function toWebUrl(link: string): URL | null {
   const trimmed = link.trim()
   const withScheme = /^[a-z]+:/i.test(trimmed) ? trimmed : `https://${trimmed}`
@@ -33,7 +36,8 @@ export function toWebUrl(link: string): URL | null {
     const isWeb = url.protocol === 'https:' || url.protocol === 'http:'
     const isLocal = url.hostname === 'localhost' || /^[\d.]+$|:/.test(url.hostname)
     const isEmail = url.username !== ''
-    return isWeb && !isLocal && !isEmail && url.hostname.includes('.') ? url : null
+    const isOddPort = url.port !== ''
+    return isWeb && !isLocal && !isEmail && !isOddPort && url.hostname.includes('.') ? url : null
   } catch {
     return null
   }
@@ -60,11 +64,31 @@ function tidyText(text: string, maxChars: number): string {
     .slice(0, maxChars)
 }
 
+// Passes a body through while counting its bytes, and cuts it off past the cap: a huge or
+// endless page can't fill the Worker's memory. The HTML read so far is still parsed.
+function capBytes(response: Response, maxBytes: number): Response {
+  let total = 0
+  const capped = response.body?.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        total += chunk.byteLength
+        if (total > maxBytes) {
+          controller.terminate()
+        } else {
+          controller.enqueue(chunk)
+        }
+      },
+    }),
+  )
+  return new Response(capped, response)
+}
+
 // Reads an HTML page: its description if asked, visible text (title included), links.
 async function readHtml(response: Response, maxChars: number, withDescription: boolean) {
   let description = ''
   let body = ''
   let insideSkipped = 0
+  let keepingLink = false
   const links: PageLink[] = []
 
   await new HTMLRewriter()
@@ -88,11 +112,14 @@ async function readHtml(response: Response, maxChars: number, withDescription: b
     })
     .on('a[href]', {
       element(element) {
-        links.push({ href: element.getAttribute('href') ?? '', label: '' })
+        keepingLink = links.length < PAGE_LINKS_MAX
+        if (keepingLink) {
+          links.push({ href: element.getAttribute('href') ?? '', label: '' })
+        }
       },
       text(chunk) {
         const link = links.at(-1)
-        if (link && link.label.length < 80) {
+        if (keepingLink && link && link.label.length < 80) {
           link.label += chunk.text
         }
       },
@@ -128,9 +155,12 @@ async function openPage(
       return { url, ok: false, note: `answered ${response.status}`, text: '', links: [] }
     }
     const isHtml = response.headers.get('content-type')?.includes('text/html')
-    const read = isHtml
-      ? await readHtml(response, maxChars, withDescription)
-      : { text: '', links: [] }
+    const tooBig = Number(response.headers.get('content-length')) > PAGE_MAX_BYTES
+    if (!isHtml || tooBig) {
+      await response.body?.cancel()
+      return { url: response.url || url, ok: true, note: null, text: '', links: [] }
+    }
+    const read = await readHtml(capBytes(response, PAGE_MAX_BYTES), maxChars, withDescription)
     return { url: response.url || url, ok: true, note: null, ...read }
   } catch {
     return { url, ok: false, note: 'unreachable', text: '', links: [] }
