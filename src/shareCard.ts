@@ -8,7 +8,6 @@ const PAD = 80
 const BG = '#0a0a0a'
 const TEXT = '#ededed'
 const MUTED = '#8b8b8b'
-const LINE = '#262626'
 const SANS = 'Inter, system-ui, sans-serif'
 const MONO = '"IBM Plex Mono", ui-monospace, monospace'
 const DIAL = { cx: 540, cy: 716, outer: 370, inner: 286, majorInner: 266, label: 404, needle: 290 }
@@ -171,7 +170,7 @@ function drawDial(context: Context, percent: number) {
   context.fill()
 }
 
-// Writes the score big under the dial, then "larp [ zone ]".
+// Writes the score big under the dial, then "LARP [ZONE]".
 function drawReading(context: Context, percent: number) {
   const zone = larpZone(percent)
   context.textAlign = 'center'
@@ -179,8 +178,8 @@ function drawReading(context: Context, percent: number) {
   context.font = `600 200px ${SANS}`
   context.fillText(`${percent}%`, WIDTH / 2, DIAL.cy + 192)
 
-  const word = 'larp  '
-  const tag = `[ ${zone.name} ]`
+  const word = 'LARP  '
+  const tag = `[${zone.name.toUpperCase()}]`
   context.font = `500 34px ${MONO}`
   const start = WIDTH / 2 - context.measureText(word + tag).width / 2
   context.textAlign = 'left'
@@ -201,20 +200,24 @@ function drawRoast(context: Context, roast: string) {
   })
 }
 
-// Draws the bottom line: a rule, then where to check your own score.
+// Draws the bottom line in the site footer's style: check yours -> and the domain.
 function drawFooter(context: Context) {
   const y = HEIGHT - PAD + 6
-  context.fillStyle = LINE
-  context.fillRect(PAD, y - 58, WIDTH - PAD * 2, 2)
-
+  const domain = 'sharporlarp.com'
   context.font = `400 26px ${MONO}`
-  context.textAlign = 'left'
   context.fillStyle = MUTED
-  context.fillText('Check yours ->', PAD, y)
-  context.font = `500 26px ${MONO}`
+  context.textAlign = 'left'
+  context.fillText('check yours ->', PAD, y)
+
+  const domainWidth = context.measureText(domain).width
+  const by = 'at '
   context.textAlign = 'right'
   context.fillStyle = TEXT
-  context.fillText('sharporlarp.com', WIDTH - PAD, y)
+  context.fillText(domain, WIDTH - PAD, y)
+  context.fillStyle = MUTED
+  context.fillText(by, WIDTH - PAD - domainWidth, y)
+  context.fillStyle = TEXT
+  context.fillRect(WIDTH - PAD - domainWidth, y + 8, domainWidth, 2)
 }
 
 // Draws the shareable score card, Strava style, and returns it as a PNG.
