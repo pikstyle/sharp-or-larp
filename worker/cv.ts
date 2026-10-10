@@ -1,5 +1,5 @@
 import type { CvInput, Dossier, LinkCheck } from './types.ts'
-import { checkLink, toWebUrl } from './web.ts'
+import { checkLink, siteHost, toWebUrl } from './web.ts'
 
 const MAX_LINKS_FOLLOWED = 5
 const CV_TEXT_MAX_CHARS = 12000
@@ -26,9 +26,14 @@ export function findGithubLoginInCv(links: string[]): string | null {
 }
 
 // Sorts the CV's links: their own repos, sites to open, and links to skip.
-export function planCvLinks(links: string[], login: string | null): CvLinkPlan {
+export function planCvLinks(
+  links: string[],
+  login: string | null,
+  githubWebsite: string | null,
+): CvLinkPlan {
   const plan: CvLinkPlan = { repoNames: [], toFetch: [], skipped: [] }
   const ownLogin = login?.toLowerCase()
+  const websiteHost = githubWebsite ? siteHost(githubWebsite) : null
 
   for (const link of new Set(links)) {
     const url = toWebUrl(link)
@@ -45,6 +50,9 @@ export function planCvLinks(links: string[], login: string | null): CvLinkPlan {
       }
     } else if (host === 'github.com') {
       plan.skipped.push({ url: url.href, status: 'skipped', note: 'another GitHub account' })
+    } else if (websiteHost && host.toLowerCase() === websiteHost) {
+      const note = 'same site as the website on their GitHub, read once under github.website'
+      plan.skipped.push({ url: url.href, status: 'skipped', note })
     } else if (host.endsWith('linkedin.com')) {
       plan.skipped.push({ url: url.href, status: 'skipped', note: 'LinkedIn needs a login' })
     } else if (plan.toFetch.length < MAX_LINKS_FOLLOWED && !plan.toFetch.includes(url.href)) {

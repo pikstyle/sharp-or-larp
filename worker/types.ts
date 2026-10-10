@@ -11,6 +11,13 @@ export type LinkCheck = {
   note: string | null
 }
 
+export type SiteVisit = {
+  url: string
+  status: 'ok' | 'dead'
+  note: string | null
+  pages: { url: string; text: string }[]
+}
+
 export type ReadmeStyle = {
   badges: number
   widgets: number
@@ -31,7 +38,7 @@ export type GithubEvidence = {
     profileReadme: string | null
     readmeStyle: ReadmeStyle
   }
-  website: LinkCheck | null
+  website: SiteVisit | null
   repos: {
     own: number
     forks: number

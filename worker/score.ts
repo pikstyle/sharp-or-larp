@@ -21,22 +21,30 @@ export type FactsScore = {
 
 const GITHUB_BASE_SCORE = 58
 const CV_ONLY_BASE_SCORE = 50
-const CV_ONLY_VIBE_WEIGHT = 0.7
 const MIN_COMMITS_TO_CLAIM = 10
 const NOTABLE_REPO_STARS = 1000
 const BUSY_CONTRIBUTIONS = 500
 const MAX_FLAGS = 3
 const VIBE_CODED_AI_PERCENT = 60
+const USED_REPO_STARS = 30
+const USED_REPO_ISSUES = 3
 const README_MAX_POINTS = 12
+const VERY_FLASHY_README = 6
+const UNBACKED_FLASH_FACTOR = 1.5
+const BACKING_PROJECT_STARS = 10
+const BACKING_MERGED_PRS = 3
 const LINKEDIN_POINTS = 2
+const DEAD_WEBSITE_POINTS = 4
 const SHARP_VIBES: VibeLabel[] = ['sharp', 'mostly_sharp']
 const LARP_VIBES: VibeLabel[] = ['mostly_larp', 'larp']
-const VIBE_SCORES: Record<VibeLabel, number> = {
-  sharp: 10,
-  mostly_sharp: 30,
-  mixed: 50,
-  mostly_larp: 70,
-  larp: 90,
+const FACTS_WEIGHT = 1.6
+const CV_ONLY_FACTS_WEIGHT = 1
+const VIBE_LEANS: Record<VibeLabel, number> = {
+  sharp: -2.5,
+  mostly_sharp: -1,
+  mixed: 0,
+  mostly_larp: 1.5,
+  larp: 3,
 }
 
 // Formats a number for a flag, e.g. 12450 becomes "12,450".
@@ -63,16 +71,19 @@ function bestProject(github: GithubEvidence): { name: string; stars: number } | 
   return [...ownRepos, ...workedOn].sort((a, b) => b.stars - a.stars)[0] ?? null
 }
 
-// Turns a flashy profile README into larp points and a flag that says why.
-function readmeSignal(style: ReadmeStyle): Signal | null {
-  const points = Math.min(
-    README_MAX_POINTS,
-    Math.min(4, style.badges * 0.4) +
-      Math.min(4, style.widgets * 1.5) +
-      Math.min(2, style.images * 0.35) +
-      Math.min(2, style.emojis * 0.15) +
-      Math.min(3, style.templatePhrases),
-  )
+// Scores a flashy profile README: a lot more when little real work stands behind it.
+function readmeSignal(style: ReadmeStyle, backedByWork: boolean): Signal | null {
+  const decoration =
+    Math.min(4, style.widgets * 1.5) +
+    Math.min(2, style.images * 0.35) +
+    Math.min(2, style.emojis * 0.15) +
+    Math.min(3, style.templatePhrases)
+  const flashiness = Math.min(4, style.badges * 0.4) + decoration
+  const fullFlashiness = Math.min(8, style.badges * 0.4) + decoration
+  const storefrontOnly = backedByWork
+    ? 0
+    : Math.max(0, fullFlashiness - VERY_FLASHY_README) * UNBACKED_FLASH_FACTOR
+  const points = Math.min(README_MAX_POINTS, flashiness) + storefrontOnly
   const parts = [
     style.badges > 0 && plural(style.badges, 'badge'),
     style.widgets > 0 && plural(style.widgets, 'stats widget'),
@@ -80,13 +91,17 @@ function readmeSignal(style: ReadmeStyle): Signal | null {
     style.templatePhrases > 0 && 'template sections ("Currently learning", "Let\'s connect"…)',
   ].filter(Boolean)
 
-  return points >= 3 ? { points, text: `Flashy profile README: ${parts.join(', ')}` } : null
+  const label = storefrontOnly > 0 ? 'Flashy profile README, little work behind it' : 'Flashy profile README'
+  return points >= 3 ? { points, text: `${label}: ${parts.join(', ')}` } : null
 }
 
-// Spots showcase repos written by AI tools rather than by the person.
+// Spots showcase repos written by AI tools that nobody uses: AI slop, not products.
 function vibeCodingSignal(github: GithubEvidence): Signal | null {
   const vibeCoded = github.showcase.filter(
-    (repo) => repo.builtWith || repo.aiCommitPercent >= VIBE_CODED_AI_PERCENT,
+    (repo) =>
+      (repo.builtWith || repo.aiCommitPercent >= VIBE_CODED_AI_PERCENT) &&
+      repo.stars < USED_REPO_STARS &&
+      repo.issuesByOthers < USED_REPO_ISSUES,
   )
   const [first] = vibeCoded
   if (!first) {
@@ -113,7 +128,9 @@ function githubSignals(github: GithubEvidence): Signal[] {
   const best = bestProject(github)
   const notablePr = prs.examples.find((pr) => pr.repoStars >= NOTABLE_REPO_STARS)
   const followerPoints = Math.min(14, 4 * Math.log10(1 + profile.followers))
-  const readme = readmeSignal(profile.readmeStyle)
+  const backedByWork =
+    busy || (best?.stars ?? 0) >= BACKING_PROJECT_STARS || prs.count >= BACKING_MERGED_PRS
+  const readme = readmeSignal(profile.readmeStyle, backedByWork)
   const vibeCoding = vibeCodingSignal(github)
 
   if (best && best.stars > 0) {
@@ -163,6 +180,10 @@ function githubSignals(github: GithubEvidence): Signal[] {
   }
   if (vibeCoding) {
     signals.push(vibeCoding)
+  }
+  if (github.website?.status === 'dead') {
+    const text = `The website on their GitHub doesn't load (${github.website.note})`
+    signals.push({ points: DEAD_WEBSITE_POINTS, text })
   }
   if (profile.linkedinOnProfile) {
     signals.push({ points: LINKEDIN_POINTS, text: 'LinkedIn linked from their GitHub profile' })
@@ -240,11 +261,17 @@ function pickFlags(factFlags: Flag[], vibeFlags: string[]): string[] {
   return [...fromFacts, ...vibeFlags].slice(0, MAX_FLAGS)
 }
 
-// Blends the facts and the LLM's gut feeling into the final verdict.
+// Turns a 0-100 score into how hard it leans larp (above 0) or sharp (below 0).
+function lean(percent: number): number {
+  const share = Math.min(0.99, Math.max(0.01, percent / 100))
+  return Math.log(share / (1 - share))
+}
+
+// Adds up the facts and the LLM's gut feeling: when they agree, the score goes extreme.
 export function combineVerdict(facts: FactsScore, vibe: Vibe): Verdict {
-  const certainty = Math.abs(facts.larpPercent - 50) / 50
-  const vibeWeight = facts.fromGithub ? 0.4 - 0.2 * certainty : CV_ONLY_VIBE_WEIGHT
-  const blended = (1 - vibeWeight) * facts.larpPercent + vibeWeight * VIBE_SCORES[vibe.vibe]
+  const factsWeight = facts.fromGithub ? FACTS_WEIGHT : CV_ONLY_FACTS_WEIGHT
+  const total = factsWeight * lean(facts.larpPercent) + VIBE_LEANS[vibe.vibe]
+  const blended = 100 / (1 + Math.exp(-total))
   const vibeRedFlags = SHARP_VIBES.includes(vibe.vibe) ? [] : vibe.redFlags
   const vibeGreenFlags = LARP_VIBES.includes(vibe.vibe) ? [] : vibe.greenFlags
 

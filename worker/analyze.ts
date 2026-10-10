@@ -28,7 +28,7 @@ import {
   type Dossier,
   type GithubEvidence,
 } from './types.ts'
-import { checkLink } from './web.ts'
+import { visitWebsite } from './web.ts'
 
 type AppContext = Context<{ Bindings: Env }>
 
@@ -94,18 +94,18 @@ async function loadGithubProfile(
   })
 }
 
-// Collects the GitHub evidence: details of the key repos and their website.
+// Collects the GitHub evidence: details of the key repos, and a visit of their site.
 async function collectGithubEvidence(
   overview: GithubOverview,
+  websiteUrl: string | null,
   cvRepoNames: string[],
   token: string,
 ): Promise<GithubEvidence> {
   const toInspect = pickReposToInspect(overview, cvRepoNames)
-  const websiteUrl = findWebsite(overview)
   const [details, commitCounts, website] = await Promise.all([
     fetchGithubDetails(overview, toInspect.ids, token),
     fetchCommitCounts(overview.ownRepos.nodes, token),
-    websiteUrl ? checkLink(websiteUrl) : null,
+    websiteUrl ? visitWebsite(websiteUrl) : null,
   ])
 
   return {
@@ -123,11 +123,16 @@ async function collectGithubEvidence(
 export async function analyze(c: AppContext) {
   const request = await readAnalyzeRequest(c)
   const overview = await loadGithubProfile(request.github, request.cv, c.env.GITHUB_TOKEN)
-  const cvPlan = request.cv ? planCvLinks(request.cv.links, overview?.login ?? null) : null
+  const websiteUrl = overview ? findWebsite(overview) : null
+  const cvPlan = request.cv
+    ? planCvLinks(request.cv.links, overview?.login ?? null, websiteUrl)
+    : null
   const cvRepoNames = cvPlan?.repoNames ?? []
 
   const [github, cvLinks] = await Promise.all([
-    overview ? collectGithubEvidence(overview, cvRepoNames, c.env.GITHUB_TOKEN) : null,
+    overview
+      ? collectGithubEvidence(overview, websiteUrl, cvRepoNames, c.env.GITHUB_TOKEN)
+      : null,
     fetchCvLinks(cvPlan),
   ])
   const dossier: Dossier = { github, cv: buildCv(request.cv, cvPlan, cvLinks) }

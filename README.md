@@ -55,7 +55,7 @@ worker/             API server (Cloudflare Worker)
 ├── github.ts       Fetches profile, repos and activity from GitHub
 ├── cvCheck.ts      Tells if a text reads like a CV (used by front and server)
 ├── cv.ts           Sorts and follows the CV's links
-├── web.ts          Opens web pages (website, CV links) and reads their text
+├── web.ts          Visits their site (home + 3 inner pages) and opens CV links
 ├── dossier.ts      Turns raw data into an evidence dossier
 ├── score.ts        Scores the numbers, then blends in the LLM's gut feeling
 ├── judge.ts        Asks Claude Haiku for its gut feeling on the texts
