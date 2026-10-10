@@ -114,14 +114,14 @@ export default function ShareSheet({ result, onClose }: Props) {
         <p className="share-text">{text}</p>
 
         <div className="share-actions">
-          <button type="button" onClick={postOnLinkedin} disabled={!card}>
-            Post on LinkedIn
-          </button>
           {canShareFiles && (
             <button type="button" className="secondary" onClick={shareWithDevice}>
               Share…
             </button>
           )}
+          <button type="button" onClick={postOnLinkedin} disabled={!card}>
+            Post on LinkedIn
+          </button>
           <button
             type="button"
             className="secondary"

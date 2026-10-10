@@ -84,6 +84,9 @@ export default function LarpMeter({ percent, searching, showReading }: Props) {
       {showReading && (
         <figcaption className="meter-reading">
           <strong style={{ color: zone.color }}>{percent}%</strong>
+          <span>
+            larp <span style={{ color: zone.color }}>[{zone.name}]</span>
+          </span>
         </figcaption>
       )}
     </figure>

@@ -128,6 +128,17 @@ button.secondary:hover {
 /* Background */
 
 
+/* Verdict flash */
+
+.verdict-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 /* Layout */
 
 .app {
@@ -429,6 +440,13 @@ button.secondary:hover {
   font-weight: 600;
   line-height: 0.9;
   letter-spacing: -0.05em;
+}
+
+.meter-reading > span {
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 

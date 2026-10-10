@@ -17,6 +17,8 @@ import ShareSheet from './ShareSheet.tsx'
 import { CONTACT_EMAIL } from './Terms.tsx'
 import { useTurnstile } from './useTurnstile.ts'
 import Verdict from './Verdict.tsx'
+import VerdictFlash from './VerdictFlash.tsx'
+import { larpZone } from './zones.ts'
 
 const PLACEHOLDERS_PER_COLUMN = 2
 const AUTHOR_URL = 'https://simon-mounier.com'
@@ -137,6 +139,12 @@ export default function App() {
 
   return (
     <div className="app">
+      {result && verdict && (
+        <VerdictFlash
+          key={result.checkId ?? verdict.roast}
+          color={larpZone(verdict.larpPercent).color}
+        />
+      )}
       {adSettings && (
         <AdStrip ads={ads} settings={adSettings} position="top" onBuy={openAdForm} />
       )}

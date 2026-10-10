@@ -1,7 +1,6 @@
 import type { AnalyzeResponse } from '../worker/types.ts'
 import { dialTicks, pointAt, zoneDegrees } from './gauge.ts'
-import { drawHalftone } from './halftone.ts'
-import { larpZone, ZONES, type Zone } from './zones.ts'
+import { larpZone, ZONES } from './zones.ts'
 
 const WIDTH = 1080
 const HEIGHT = 1350
@@ -16,7 +15,6 @@ const DIAL = { cx: 540, cy: 716, outer: 370, inner: 286, majorInner: 266, label:
 const AVATAR_SIZE = 88
 const AVATAR_TIMEOUT_MS = 4000
 const ROAST_MAX_LINES = 3
-const HALFTONE_TIME = 7.3
 
 type Context = CanvasRenderingContext2D
 
@@ -81,22 +79,9 @@ function wrapLines(context: Context, text: string, maxWidth: number, maxLines: n
   return kept
 }
 
-// Paints the dark background with a halftone haze in the zone's color.
-function drawBackground(context: Context, zone: Zone) {
+// Paints the plain dark background.
+function drawBackground(context: Context) {
   context.fillStyle = BG
-  context.fillRect(0, 0, WIDTH, HEIGHT)
-  drawHalftone(context, WIDTH, HEIGHT, HALFTONE_TIME, {
-    color: `${zone.color}59`,
-    step: 12,
-    maxSize: 8,
-  })
-
-  const fade = context.createLinearGradient(0, 0, 0, HEIGHT)
-  fade.addColorStop(0, `${BG}80`)
-  fade.addColorStop(0.4, `${BG}33`)
-  fade.addColorStop(0.72, `${BG}d9`)
-  fade.addColorStop(1, `${BG}99`)
-  context.fillStyle = fade
   context.fillRect(0, 0, WIDTH, HEIGHT)
 }
 
@@ -244,7 +229,7 @@ export async function drawShareCard(result: AnalyzeResponse): Promise<Blob> {
   }
 
   const { larpPercent, roast } = result.verdict
-  drawBackground(context, larpZone(larpPercent))
+  drawBackground(context)
   drawHeader(context)
   drawProfile(context, result.login, avatar)
   drawDial(context, larpPercent)

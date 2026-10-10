@@ -36,8 +36,8 @@ src/                React front
 ├── App.tsx         The page: form, meter, verdict, ad slots, footer
 ├── LarpMeter.tsx   The dial
 ├── gauge.ts        The dial's geometry, shared with the share card
-├── halftone.ts     Draws the halftone dots on the share card
-├── Verdict.tsx     Roast, red and green flags, share button
+├── Verdict.tsx     Roast, red and green flags
+├── VerdictFlash.tsx  Quick flash of colored dots when a verdict lands
 ├── ShareSheet.tsx  Share the score: LinkedIn, phone share menu, download
 ├── shareCard.ts    Draws the score card image in the browser
 ├── LoadingPhrase.tsx  Rotating "Cooking…" lines while it checks
