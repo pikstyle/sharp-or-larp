@@ -1,7 +1,7 @@
 import { useEffect, useState, type SubmitEvent } from 'react'
 import type { Ad, AdsResponse, AdText } from '../worker/types.ts'
 import { toAdImage } from './adImage.ts'
-import { startAdCheckout } from './api.ts'
+import { errorMessage, startAdCheckout } from './api.ts'
 import { useTurnstile } from './useTurnstile.ts'
 import { larpZone } from './zones.ts'
 
@@ -269,8 +269,8 @@ export function AdForm({ score, settings, onClose }: FormProps) {
   const zone = larpZone(score.larpPercent)
   const {
     container: humanCheckBox,
-    token: humanToken,
     needsClick: humanCheckNeedsClick,
+    waitForToken: waitForHumanToken,
     reset: resetHumanCheck,
   } = useTurnstile('checkout')
 
@@ -288,14 +288,14 @@ export function AdForm({ score, settings, onClose }: FormProps) {
   // Creates the Stripe payment page and moves the visitor there.
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!humanToken) {
-      setError("Still checking you're not a bot. Try again in a second.")
-      return
-    }
     setSending(true)
     setError(null)
 
     try {
+      const humanToken = await waitForHumanToken()
+      if (!humanToken) {
+        throw new Error(errorMessage('bot_check_failed'))
+      }
       const request = { ...ad, checkId: score.checkId, imageJpeg: image }
       const { url } = await startAdCheckout(request, humanToken)
       window.location.assign(url)

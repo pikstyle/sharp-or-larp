@@ -9,7 +9,7 @@ import {
   ScoreOffer,
   type AdScore,
 } from './AdSlots.tsx'
-import { analyzeProfile, fetchAds } from './api.ts'
+import { analyzeProfile, errorMessage, fetchAds } from './api.ts'
 import CvPicker, { type PickedCv } from './CvPicker.tsx'
 import LarpMeter from './LarpMeter.tsx'
 import LoadingPhrase from './LoadingPhrase.tsx'
@@ -64,8 +64,8 @@ export default function App() {
   const githubInput = useRef<HTMLInputElement>(null)
   const {
     container: humanCheckBox,
-    token: humanToken,
     needsClick: humanCheckNeedsClick,
+    waitForToken: waitForHumanToken,
     reset: resetHumanCheck,
   } = useTurnstile('analyze')
 
@@ -82,16 +82,16 @@ export default function App() {
       setError('Add a GitHub link, a CV, or both.')
       return
     }
-    if (!humanToken) {
-      setError("Still checking you're not a bot. Try again in a second.")
-      return
-    }
 
     setLoading(true)
     setError(null)
     setHint(null)
     setResult(null)
     try {
+      const humanToken = await waitForHumanToken()
+      if (!humanToken) {
+        throw new Error(errorMessage('bot_check_failed'))
+      }
       setResult(await analyzeProfile(github.trim() || null, cv?.input ?? null, humanToken))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
