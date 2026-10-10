@@ -49,7 +49,8 @@ export default function Terms() {
       <p>
         A CV is read in your browser; its text and links are sent to our server and to an AI
         model provider to produce the verdict, then discarded. For each check we keep the GitHub
-        username and the score, so an ad can show it. For ads we keep the name, headline, link,
+        username and the score, so an ad can show it. We also keep each verdict for 30 days, so
+        that checking the same unchanged profile again gives the same verdict. For ads we keep the name, headline, link,
         image and score while the ad runs. We use no tracking cookies. Share cards are drawn in
         your browser and never sent to us.
       </p>

@@ -19,7 +19,7 @@ import {
   pickReposToInspect,
   type GithubOverview,
 } from './github.ts'
-import { judgeVibe, parseVibe } from './judge.ts'
+import { judgeVibe, parseVibe, vibeFingerprint } from './judge.ts'
 import { combineVerdict, scoreFacts } from './score.ts'
 import {
   ApiError,
@@ -28,6 +28,7 @@ import {
   type Dossier,
   type GithubEvidence,
 } from './types.ts'
+import { findVibe, saveVibe } from './vibeCache.ts'
 import { visitWebsite } from './web.ts'
 
 type AppContext = Context<{ Bindings: Env }>
@@ -138,12 +139,18 @@ export async function analyze(c: AppContext) {
   const dossier: Dossier = { github, cv: buildCv(request.cv, cvPlan, cvLinks) }
 
   const facts = scoreFacts(dossier)
-  const vibe = parseVibe(await judgeVibe(dossier, c.env))
+  const fingerprint = await vibeFingerprint(dossier)
+  const savedVibe = await findVibe(c.env.DB, fingerprint)
+  const vibe = savedVibe ?? parseVibe(await judgeVibe(dossier, c.env))
+  if (!savedVibe) {
+    await saveVibe(c.env.DB, fingerprint, vibe)
+  }
   const verdict = combineVerdict(facts, vibe)
   console.log('verdict', overview?.login ?? 'cv-only', {
     facts: Math.round(facts.larpPercent),
     vibe: vibe.vibe,
     final: verdict.larpPercent,
+    reused: savedVibe !== null,
   })
 
   const login = overview?.login ?? null

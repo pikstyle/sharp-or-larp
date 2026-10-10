@@ -86,6 +86,14 @@ function vibeInput(dossier: Dossier) {
   }
 }
 
+// Names what the LLM is about to read: the model, its instructions and the texts, hashed.
+// The same fingerprint means the same question, so the same answer can be given again.
+export async function vibeFingerprint(dossier: Dossier): Promise<string> {
+  const question = JSON.stringify([LLM_MODEL, SYSTEM_PROMPT, vibeInput(dossier)])
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(question))
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 // Sends the texts to Claude and returns its JSON answer about their vibe.
 export async function judgeVibe(dossier: Dossier, env: Env): Promise<string> {
   const client = new Anthropic({

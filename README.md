@@ -60,6 +60,7 @@ worker/             API server (Cloudflare Worker)
 ├── dossier.ts      Turns raw data into an evidence dossier
 ├── score.ts        Scores the numbers, then blends in the LLM's gut feeling
 ├── judge.ts        Asks Claude Haiku for its gut feeling on the texts
+├── vibeCache.ts    Keeps that gut feeling, so unchanged texts get the same verdict again
 ├── checks.ts       Saves each score, so an ad can show it untouched
 ├── ads.ts          Ad slots, images, Stripe checkout and webhook
 └── types.ts        Shapes shared with the front, and ApiError
