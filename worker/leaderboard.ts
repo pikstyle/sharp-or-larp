@@ -22,16 +22,19 @@ const CACHED_PAGES = 10
 const CACHE_SECONDS = 60
 const SHARP_BELOW_PERCENT = 50
 const SORT_ORDER: Record<Board, string> = {
-  sharpest: 'larp_percent ASC, added_at ASC',
-  larpiest: 'larp_percent DESC, added_at ASC',
+  sharpest: 'larp_percent ASC, updated_at DESC',
+  larpiest: 'larp_percent DESC, updated_at DESC',
+  newest: 'updated_at DESC',
+  oldest: 'updated_at ASC',
 }
+const SORTS = Object.keys(SORT_ORDER) as Board[]
 const ENTRY_COLUMNS = `github_login AS login, avatar_url AS avatarUrl,
   larp_percent AS larpPercent, updated_at AS updatedAt`
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 
-// Reads which sort and which page of 50 the visitor asks for.
+// Reads the sort and the page of 50 asked for; sharpest first by default.
 function readPageRequest(c: AppContext): { sort: Board; page: number } {
-  const sort = c.req.query('sort') === 'larpiest' ? 'larpiest' : 'sharpest'
+  const sort = SORTS.find((known) => known === c.req.query('sort')) ?? 'sharpest'
   const page = Number(c.req.query('page') ?? 0)
 
   if (!Number.isInteger(page) || page < 0 || page >= MAX_PAGES) {
@@ -73,7 +76,7 @@ export async function listLeaderboard(c: AppContext) {
 
 // Forgets the cached pages, so the next visitor sees the board as it is now.
 export async function forgetCachedBoard(origin: string) {
-  const keys = (['sharpest', 'larpiest'] as const).flatMap((sort) =>
+  const keys = SORTS.flatMap((sort) =>
     Array.from({ length: CACHED_PAGES }, (_, page) => pageCacheKey(origin, sort, page)),
   )
   await Promise.all(keys.map((key) => caches.default.delete(key)))
@@ -109,7 +112,7 @@ async function saveEntry(db: D1Database, checkId: string) {
     .first<{ login: string; larpPercent: number }>()
 }
 
-// Picks the sort that shows a profile best, and its place in it; ties share one.
+// Picks the sort that shows a profile best, and its place: first among its ties.
 async function findRank(db: D1Database, larpPercent: number) {
   const board: Board = larpPercent < SHARP_BELOW_PERCENT ? 'sharpest' : 'larpiest'
   const ahead = board === 'sharpest' ? '<' : '>'

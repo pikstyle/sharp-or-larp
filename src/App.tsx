@@ -238,6 +238,7 @@ export default function App() {
             hasMore={board.hasMore}
             loadingMore={board.loadingMore}
             error={board.error}
+            loadedAt={board.loadedAt}
             sort={boardSort}
             highlightLogin={result?.login ?? null}
             onSort={(sort) => {

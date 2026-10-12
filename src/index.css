@@ -1206,7 +1206,7 @@ button.secondary:hover {
 }
 
 .board-columns .board-sort {
-  justify-self: end;
+  justify-self: start;
   height: auto;
   padding: 0;
   font: inherit;
@@ -1215,6 +1215,10 @@ button.secondary:hover {
   color: var(--text);
   background: none;
   border: 0;
+}
+
+.board-columns .board-score.board-sort {
+  justify-self: end;
 }
 
 .board-columns .board-sort:hover {

@@ -143,7 +143,7 @@ export type LeaderboardPage = {
   hasMore: boolean
 }
 
-export type Board = 'sharpest' | 'larpiest'
+export type Board = 'sharpest' | 'larpiest' | 'newest' | 'oldest'
 
 export type LeaderboardAddResponse = {
   login: string

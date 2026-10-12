@@ -10,6 +10,7 @@ type BoardState = {
   entries: LeaderboardEntry[]
   hasMore: boolean
   error: string | null
+  loadedAt: number
 }
 
 // Loads pages from the top until it holds at least that many rows, or all of them.
@@ -36,11 +37,9 @@ export function useLeaderboard(sort: Board, minRows: number, version: number) {
   useEffect(() => {
     let current = true
     loadPages(sort, minRows)
-      .then((loaded) => current && setState({ sort, ...loaded, error: null }))
-      .catch(
-        (caught: Error) =>
-          current && setState({ sort, entries: [], hasMore: false, error: caught.message }),
-      )
+      .then((loaded) => ({ ...loaded, error: null }))
+      .catch((caught: Error) => ({ entries: [], hasMore: false, error: caught.message }))
+      .then((loaded) => current && setState({ sort, ...loaded, loadedAt: Date.now() }))
     return () => {
       current = false
     }
@@ -54,7 +53,12 @@ export function useLeaderboard(sort: Board, minRows: number, version: number) {
     setLoadingMore(true)
     try {
       const loaded = await fetchLeaderboard(sort, Math.ceil(state.entries.length / PAGE_SIZE))
-      setState({ ...state, entries: [...state.entries, ...loaded.entries], hasMore: loaded.hasMore })
+      setState({
+        ...state,
+        entries: [...state.entries, ...loaded.entries],
+        hasMore: loaded.hasMore,
+        loadedAt: Date.now(),
+      })
     } catch (caught) {
       setState({ ...state, error: caught instanceof Error ? caught.message : String(caught) })
     } finally {
@@ -66,6 +70,7 @@ export function useLeaderboard(sort: Board, minRows: number, version: number) {
     entries: state?.entries ?? null,
     hasMore: state?.hasMore ?? false,
     error: state?.error ?? null,
+    loadedAt: state?.loadedAt ?? 0,
     loadingMore,
     loadMore,
   }

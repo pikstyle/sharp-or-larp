@@ -265,7 +265,7 @@ export function AdForm({ settings, onClose }: FormProps) {
             value={ad.headline}
             onChange={(event) => setAd({ ...ad, headline: event.target.value })}
             placeholder="CS student, looking for a summer internship"
-            maxLength={80}
+            maxLength={50}
             required
           />
         </label>
