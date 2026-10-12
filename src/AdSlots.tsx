@@ -68,7 +68,7 @@ type TickerProps = {
   onBuy: () => void
 }
 
-// A ticker of ad boxes (logo and name) scrolling at the top or bottom on phones.
+// A ticker of ad boxes (logo, name, headline) scrolling on phones, top or bottom.
 export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
   const hasFreeSlot = ads.length < settings.slots
   const items: (Ad | null)[] = [...ads, ...(hasFreeSlot ? [null] : [])]
@@ -93,8 +93,11 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           rel={SPONSORED}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <AdLogo ad={ad} size={22} />
-          <strong>{ad.name}</strong>
+          <AdLogo ad={ad} size={28} />
+          <span className="ticker-text">
+            <strong>{ad.name}</strong>
+            <span>{ad.headline}</span>
+          </span>
         </a>
       ) : (
         <button
@@ -104,10 +107,13 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           onClick={onBuy}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <span className="ad-plus" style={{ width: 22, height: 22 }} aria-hidden="true">
+          <span className="ad-plus" style={{ width: 28, height: 28 }} aria-hidden="true">
             +
           </span>
-          <strong>Own the spot!</strong>
+          <span className="ticker-text">
+            <strong>Own the spot!</strong>
+            <span>Your link, seen by everyone.</span>
+          </span>
         </button>
       ),
     )

@@ -145,7 +145,7 @@ button.secondary:hover {
 .app {
   position: relative;
   z-index: 1;
-  padding-bottom: 60px;
+  padding-bottom: 68px;
 }
 
 .layout {
@@ -749,7 +749,7 @@ button.secondary:hover {
 .ticker {
   position: relative;
   z-index: 2;
-  height: 60px;
+  height: 68px;
   overflow: hidden;
   font-size: 0.75rem;
   background: var(--bg);
@@ -795,9 +795,9 @@ button.secondary:hover {
   flex: none;
   align-items: center;
   gap: 10px;
-  height: 42px;
+  height: 52px;
   margin-right: 10px;
-  padding: 0 16px;
+  padding: 0 14px;
   font-size: inherit;
   font-weight: 400;
   color: var(--text);
@@ -811,9 +811,21 @@ button.secondary:hover {
   background: color-mix(in srgb, var(--tint) 12%, var(--bg));
 }
 
+.ticker-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.ticker-text span {
+  font-size: 0.72rem;
+}
+
 .ticker-item strong {
   font-family: var(--sans);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
