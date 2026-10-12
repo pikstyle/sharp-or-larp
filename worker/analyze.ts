@@ -161,7 +161,7 @@ export async function analyze(c: AppContext) {
     avatarUrl: overview?.avatarUrl ?? null,
   }
   if (login) {
-    await refreshLeaderboard(c.env.DB, { ...check, githubLogin: login })
+    await refreshLeaderboard(c, { ...check, githubLogin: login })
   }
 
   const response: AnalyzeResponse = {

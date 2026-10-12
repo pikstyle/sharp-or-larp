@@ -113,13 +113,10 @@ export type AdText = {
 }
 
 export type Ad = AdText & {
-  larpPercent: number | null
-  githubLogin: string | null
   imageUrl: string | null
 }
 
 export type AdRequest = AdText & {
-  checkId: string
   imageJpeg: string | null
 }
 
@@ -141,12 +138,12 @@ export type LeaderboardEntry = {
   updatedAt: number
 }
 
-export type LeaderboardResponse = {
-  sharpest: LeaderboardEntry[]
-  larpiest: LeaderboardEntry[]
+export type LeaderboardPage = {
+  entries: LeaderboardEntry[]
+  hasMore: boolean
 }
 
-export type Board = keyof LeaderboardResponse
+export type Board = 'sharpest' | 'larpiest'
 
 export type LeaderboardAddResponse = {
   login: string

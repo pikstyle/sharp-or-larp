@@ -1,15 +1,12 @@
 export const CHECK_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
-export type SavedCheck = {
+type NewCheck = {
   githubLogin: string | null
   larpPercent: number
-}
-
-type NewCheck = SavedCheck & {
   avatarUrl: string | null
 }
 
-// Saves a check so an ad or the leaderboard can use it, and returns its id.
+// Saves a check so the leaderboard can use it, and returns its id.
 export async function saveCheck(db: D1Database, check: NewCheck): Promise<string | null> {
   const id = crypto.randomUUID()
 
@@ -26,15 +23,4 @@ export async function saveCheck(db: D1Database, check: NewCheck): Promise<string
     console.error('Could not save the check', error)
     return null
   }
-}
-
-// Finds a check from the last 24 hours: only those scores can go on an ad.
-export async function findRecentCheck(db: D1Database, id: string): Promise<SavedCheck | null> {
-  return db
-    .prepare(
-      `SELECT github_login AS githubLogin, larp_percent AS larpPercent FROM checks
-       WHERE id = ? AND created_at > ?`,
-    )
-    .bind(id, Date.now() - CHECK_MAX_AGE_MS)
-    .first<SavedCheck>()
 }

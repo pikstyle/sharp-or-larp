@@ -1,5 +1,4 @@
 import type { Context } from 'hono'
-import { findRecentCheck, type SavedCheck } from './checks.ts'
 import {
   ApiError,
   type Ad,
@@ -12,9 +11,9 @@ import { toWebUrl } from './web.ts'
 
 type AppContext = Context<{ Bindings: Env }>
 
-type NewAd = AdText & SavedCheck & { imageId: string | null }
+type NewAd = AdText & { imageId: string | null }
 
-const ADS_ENABLED = false
+const ADS_ENABLED = true
 const AD_SLOTS = 8
 const AD_DAYS = 7
 const AD_PRICE_CENTS = 1000
@@ -23,12 +22,10 @@ const NAME_MAX_CHARS = 40
 const HEADLINE_MAX_CHARS = 80
 const URL_MAX_CHARS = 200
 const IMAGE_MAX_BYTES = 100 * 1024
-const IMAGES_PER_CHECK = 3
 const UNUSED_IMAGE_MAX_AGE_MS = DAY_MS
 const SIGNATURE_TOLERANCE_S = 300
 const CHECKOUT_MINUTES = 31
 const PAID_EVENTS = ['checkout.session.completed', 'checkout.session.async_payment_succeeded']
-const GITHUB_LOGIN = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 const BASE64 = /^[a-z\d+/]+={0,2}$/i
 const JPEG_START = '\xff\xd8\xff'
@@ -36,8 +33,7 @@ const JPEG_START = '\xff\xd8\xff'
 // Lists the ads that are paid for and still running, oldest first.
 export async function listAds(c: AppContext) {
   const { results } = await c.env.DB.prepare(
-    `SELECT name, headline, link_url AS url, larp_percent AS larpPercent,
-       github_login AS githubLogin, image_id AS imageId
+    `SELECT name, headline, link_url AS url, image_id AS imageId
      FROM ads WHERE expires_at > ? ORDER BY created_at ASC LIMIT ?`,
   )
     .bind(Date.now(), AD_SLOTS)
@@ -91,21 +87,17 @@ function readAdImage(value: unknown): string | null {
   return value
 }
 
-// Checks the ad form: a name, a headline, a link, an image and the check's id.
+// Checks the ad form: a name, a headline, a link and an optional image.
 async function readAdRequest(c: AppContext): Promise<AdRequest> {
   const body = await c.req.json().catch(() => null)
   const name = readText(body?.name, NAME_MAX_CHARS)
   const headline = readText(body?.headline, HEADLINE_MAX_CHARS)
   const url = readAdLink(body?.url)
-  const checkId = readText(body?.checkId, 36)
 
   if (!name || !headline || !url) {
     throw new ApiError(400, 'invalid_ad')
   }
-  if (!checkId || !UUID.test(checkId)) {
-    throw new ApiError(400, 'check_expired')
-  }
-  return { name, headline, url, checkId, imageJpeg: readAdImage(body?.imageJpeg) }
+  return { name, headline, url, imageJpeg: readAdImage(body?.imageJpeg) }
 }
 
 // Counts the ads currently on display.
@@ -146,9 +138,8 @@ async function postToStripe<T>(
   return body
 }
 
-// Keeps an ad's image until the ad runs. Images no ad uses are cleared after a day, and one
-// check keeps only its last few, so retrying the form can't pile images up in the database.
-async function saveAdImage(db: D1Database, checkId: string, jpegBase64: string): Promise<string> {
+// Keeps an ad's image until the ad runs, and clears images no ad used within a day.
+async function saveAdImage(db: D1Database, jpegBase64: string): Promise<string> {
   const id = crypto.randomUUID()
   const now = Date.now()
   const inUse = 'SELECT image_id FROM ads WHERE image_id IS NOT NULL AND expires_at > ?'
@@ -158,14 +149,8 @@ async function saveAdImage(db: D1Database, checkId: string, jpegBase64: string):
       .prepare(`DELETE FROM ad_images WHERE created_at < ? AND id NOT IN (${inUse})`)
       .bind(now - UNUSED_IMAGE_MAX_AGE_MS, now),
     db
-      .prepare(
-        `DELETE FROM ad_images WHERE check_id = ? AND id NOT IN (${inUse}) AND id NOT IN
-         (SELECT id FROM ad_images WHERE check_id = ? ORDER BY created_at DESC LIMIT ?)`,
-      )
-      .bind(checkId, now, checkId, IMAGES_PER_CHECK - 1),
-    db
-      .prepare('INSERT INTO ad_images (id, jpeg_base64, created_at, check_id) VALUES (?, ?, ?, ?)')
-      .bind(id, jpegBase64, now, checkId),
+      .prepare('INSERT INTO ad_images (id, jpeg_base64, created_at) VALUES (?, ?, ?)')
+      .bind(id, jpegBase64, now),
   ])
   return id
 }
@@ -185,11 +170,7 @@ async function createStripeCheckout(ad: NewAd, origin: string, secretKey: string
     'metadata[name]': ad.name,
     'metadata[headline]': ad.headline,
     'metadata[link_url]': ad.url,
-    'metadata[larp_percent]': String(ad.larpPercent),
   })
-  if (ad.githubLogin) {
-    form.set('metadata[github_login]', ad.githubLogin)
-  }
   if (ad.imageId) {
     form.set('metadata[image_id]', ad.imageId)
   }
@@ -207,18 +188,14 @@ export async function createAdCheckout(c: AppContext) {
   if (!ADS_ENABLED) {
     throw new ApiError(503, 'ads_paused')
   }
-  const { checkId, imageJpeg, ...text } = await readAdRequest(c)
-  const check = await findRecentCheck(c.env.DB, checkId)
+  const { imageJpeg, ...text } = await readAdRequest(c)
 
-  if (!check) {
-    throw new ApiError(400, 'check_expired')
-  }
   if ((await countActiveAds(c.env.DB)) >= AD_SLOTS) {
     throw new ApiError(409, 'ads_sold_out')
   }
 
-  const imageId = imageJpeg ? await saveAdImage(c.env.DB, checkId, imageJpeg) : null
-  const ad: NewAd = { ...text, ...check, imageId }
+  const imageId = imageJpeg ? await saveAdImage(c.env.DB, imageJpeg) : null
+  const ad: NewAd = { ...text, imageId }
   const origin = new URL(c.req.url).origin
   const response: AdCheckoutResponse = {
     url: await createStripeCheckout(ad, origin, c.env.STRIPE_SECRET_KEY),
@@ -275,8 +252,6 @@ type StripeSession = {
     headline?: string
     link_url?: string
     linkedin_url?: string
-    larp_percent?: string
-    github_login?: string
     image_id?: string
   }
 }
@@ -291,8 +266,6 @@ function readPaidAd(event: StripeEvent): NewAd | null {
   const session = event.data.object
   const meta = session.metadata
   const url = readAdLink(meta?.link_url ?? meta?.linkedin_url)
-  const larpPercent = Number(meta?.larp_percent)
-  const githubLogin = meta?.github_login ?? ''
   const imageId = meta?.image_id ?? ''
 
   if (
@@ -300,10 +273,7 @@ function readPaidAd(event: StripeEvent): NewAd | null {
     session.payment_status !== 'paid' ||
     !meta?.name ||
     !meta.headline ||
-    !url ||
-    !Number.isInteger(larpPercent) ||
-    larpPercent < 0 ||
-    larpPercent > 100
+    !url
   ) {
     return null
   }
@@ -311,8 +281,6 @@ function readPaidAd(event: StripeEvent): NewAd | null {
     name: meta.name,
     headline: meta.headline,
     url,
-    larpPercent,
-    githubLogin: GITHUB_LOGIN.test(githubLogin) ? githubLogin : null,
     imageId: UUID.test(imageId) ? imageId : null,
   }
 }
@@ -323,9 +291,8 @@ async function publishAd(db: D1Database, sessionId: string, ad: NewAd): Promise<
   const result = await db
     .prepare(
       `INSERT OR IGNORE INTO ads
-       (stripe_session_id, name, headline, link_url, larp_percent, github_login, image_id,
-        created_at, expires_at)
-       SELECT ?, ?, ?, ?, ?, ?, (SELECT id FROM ad_images WHERE id = ?), ?, ?
+       (stripe_session_id, name, headline, link_url, image_id, created_at, expires_at)
+       SELECT ?, ?, ?, ?, (SELECT id FROM ad_images WHERE id = ?), ?, ?
        WHERE (SELECT COUNT(*) FROM ads WHERE expires_at > ?) < ?`,
     )
     .bind(
@@ -333,8 +300,6 @@ async function publishAd(db: D1Database, sessionId: string, ad: NewAd): Promise<
       ad.name,
       ad.headline,
       ad.url,
-      ad.larpPercent,
-      ad.githubLogin,
       ad.imageId,
       now,
       now + AD_DAYS * DAY_MS,

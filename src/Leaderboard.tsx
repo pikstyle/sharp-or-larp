@@ -3,12 +3,11 @@ import type {
   Board,
   LeaderboardAddResponse,
   LeaderboardEntry,
-  LeaderboardResponse,
 } from '../worker/types.ts'
 import { addToLeaderboard } from './api.ts'
 import { larpZone } from './zones.ts'
 
-const ROWS_SHOWN = 10
+const FIRST_ROWS = 10
 
 type AddProps = {
   checkId: string
@@ -110,23 +109,45 @@ function BoardRow({ entry, rank, highlighted }: RowProps) {
 }
 
 type BoardProps = {
-  boards: LeaderboardResponse | null
+  entries: LeaderboardEntry[] | null
+  hasMore: boolean
+  loadingMore: boolean
   error: string | null
   sort: Board
-  onSort: (sort: Board) => void
   highlightLogin: string | null
+  onSort: (sort: Board) => void
+  onMore: () => void
 }
 
 // The leaderboard under the meter; a click on "Larp" flips who comes first.
-export default function Leaderboard({ boards, error, sort, onSort, highlightLogin }: BoardProps) {
-  const [showAll, setShowAll] = useState(false)
+export default function Leaderboard({
+  entries,
+  hasMore,
+  loadingMore,
+  error,
+  sort,
+  highlightLogin,
+  onSort,
+  onMore,
+}: BoardProps) {
+  const [expanded, setExpanded] = useState(false)
 
-  const entries = boards?.[sort] ?? []
-  const ranks = rankEntries(entries)
-  const highlightIndex = entries.findIndex(
+  const rows = entries ?? []
+  const ranks = rankEntries(rows)
+  const highlightIndex = rows.findIndex(
     (entry) => entry.login.toLowerCase() === highlightLogin?.toLowerCase(),
   )
-  const rowsShown = showAll || highlightIndex >= ROWS_SHOWN ? entries.length : ROWS_SHOWN
+  const showAll = expanded || highlightIndex >= FIRST_ROWS
+  const visible = showAll ? rows : rows.slice(0, FIRST_ROWS)
+
+  // Shows the rest of the loaded rows first, then loads the next 50.
+  function showMore() {
+    if (showAll) {
+      onMore()
+    } else {
+      setExpanded(true)
+    }
+  }
 
   return (
     <section className="board" id="leaderboard" aria-labelledby="board-title">
@@ -137,12 +158,12 @@ export default function Leaderboard({ boards, error, sort, onSort, highlightLogi
           {error}
         </p>
       )}
-      {!boards && !error && <p className="board-empty">Loading…</p>}
-      {boards && entries.length === 0 && (
+      {!entries && !error && <p className="board-empty">Loading…</p>}
+      {entries && rows.length === 0 && !error && (
         <p className="board-empty">Nobody ranked yet. Check a profile and add it.</p>
       )}
 
-      {entries.length > 0 && (
+      {rows.length > 0 && (
         <>
           <div className="board-columns">
             <span>#</span>
@@ -158,7 +179,7 @@ export default function Leaderboard({ boards, error, sort, onSort, highlightLogi
             </button>
           </div>
           <ol className="board-list">
-            {entries.slice(0, rowsShown).map((entry, index) => (
+            {visible.map((entry, index) => (
               <BoardRow
                 key={entry.login}
                 entry={entry}
@@ -170,9 +191,14 @@ export default function Leaderboard({ boards, error, sort, onSort, highlightLogi
         </>
       )}
 
-      {entries.length > rowsShown && (
-        <button type="button" className="secondary board-more" onClick={() => setShowAll(true)}>
-          Show {entries.length - rowsShown} more
+      {(rows.length > visible.length || hasMore) && (
+        <button
+          type="button"
+          className="secondary board-more"
+          onClick={showMore}
+          disabled={loadingMore}
+        >
+          {loadingMore ? 'Loading…' : 'Show more'}
         </button>
       )}
     </section>

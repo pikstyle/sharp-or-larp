@@ -1,42 +1,25 @@
-import { useEffect, useState, type ReactNode, type SubmitEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import type { Ad, AdsResponse, AdText } from '../worker/types.ts'
 import { toAdImage } from './adImage.ts'
 import { errorMessage, startAdCheckout } from './api.ts'
 import { useTurnstile } from './useTurnstile.ts'
-import { larpZone } from './zones.ts'
 
 const MIN_TICKER_ITEMS = 6
 const SPONSORED = 'noopener noreferrer nofollow sponsored'
 
-export type AdScore = {
-  checkId: string
-  larpPercent: number
-  githubLogin: string | null
+type LogoProps = {
+  ad: Ad
+  size: number
 }
 
-// Names where an ad leads: LinkedIn, GitHub, or the site's own address.
-function linkLabel(url: string): string {
-  const host = new URL(url).hostname.replace(/^www\./, '')
-  if (host.endsWith('linkedin.com')) {
-    return 'LinkedIn'
-  }
-  return host === 'github.com' ? 'GitHub' : host
-}
-
-type ScoreTagProps = {
-  larpPercent: number | null
-  githubLogin: string | null
-  className: string
-}
-
-// Writes an ad's score, e.g. "12% larp · @login", in the color of its zone.
-function ScoreTag({ larpPercent, githubLogin, className }: ScoreTagProps) {
-  if (larpPercent === null) {
-    return null
+// An ad's logo: its image, or the first letter of its name.
+function AdLogo({ ad, size }: LogoProps) {
+  if (ad.imageUrl) {
+    return <img src={ad.imageUrl} alt="" width={size} height={size} />
   }
   return (
-    <span className={className} style={{ color: larpZone(larpPercent).color }}>
-      {larpPercent}% larp · {githubLogin ? `@${githubLogin}` : 'from a CV'}
+    <span className="ad-initial" style={{ width: size, height: size }} aria-hidden="true">
+      {ad.name.slice(0, 1).toUpperCase()}
     </span>
   )
 }
@@ -45,25 +28,13 @@ type CardProps = {
   ad: Ad
 }
 
-// One running ad in a side column: who, what they do, their score, their link.
+// One running ad in a side column: logo, name and headline, on a sharp green tint.
 export function AdCard({ ad }: CardProps) {
   return (
     <a className="ad-card" href={ad.url} target="_blank" rel={SPONSORED}>
-      <span className="ad-card-head">
-        {ad.imageUrl ? (
-          <img src={ad.imageUrl} alt="" width={36} height={36} />
-        ) : (
-          <span className="ad-card-initial" aria-hidden="true">
-            {ad.name.slice(0, 1).toUpperCase()}
-          </span>
-        )}
-        <span className="ad-card-who">
-          <strong>{ad.name}</strong>
-          <span className="ad-card-link">{linkLabel(ad.url)} -&gt;</span>
-        </span>
-      </span>
+      <AdLogo ad={ad} size={36} />
+      <strong>{ad.name}</strong>
       <span className="ad-card-headline">{ad.headline}</span>
-      <ScoreTag {...ad} className="ad-card-score" />
     </a>
   )
 }
@@ -77,9 +48,9 @@ type EmptyCardProps = {
 export function AdEmptyCard({ settings, onBuy }: EmptyCardProps) {
   return (
     <button type="button" className="ad-card ad-card-empty" onClick={onBuy}>
-      <strong>+ Your ad here</strong>
-      <span>
-        Your score next to your link. ${settings.priceUsd} for {settings.days} days.
+      <strong>Own the spot!</strong>
+      <span className="ad-card-headline">
+        ${settings.priceUsd} for {settings.days} days
       </span>
     </button>
   )
@@ -97,7 +68,7 @@ type TickerProps = {
   onBuy: () => void
 }
 
-// A ticker of ads that scrolls by, at the top or bottom on phones.
+// A ticker of small ad boxes that scrolls by, at the top or bottom on phones.
 export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
   const hasFreeSlot = ads.length < settings.slots
   const items: (Ad | null)[] = [...ads, ...(hasFreeSlot ? [null] : [])]
@@ -122,20 +93,19 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           rel={SPONSORED}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          {ad.imageUrl && <img src={ad.imageUrl} alt="" width={20} height={20} />}
-          <ScoreTag {...ad} className="ticker-tag" />
-          <strong>{ad.name}</strong> {ad.headline}
+          <AdLogo ad={ad} size={18} />
+          <strong>{ad.name}</strong>
+          <span className="ticker-headline">{ad.headline}</span>
         </a>
       ) : (
         <button
           key={`${copy}-${index}`}
           type="button"
-          className="ticker-item ticker-ad"
+          className="ticker-item ticker-free"
           onClick={onBuy}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <span className="ticker-tag">[ Your ad here ]</span>${settings.priceUsd} for{' '}
-          {settings.days} days
+          <strong>Own the spot!</strong>${settings.priceUsd} for {settings.days} days
         </button>
       ),
     )
@@ -149,58 +119,6 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
         </div>
       </div>
     </div>
-  )
-}
-
-type OfferProps = {
-  larpPercent: number
-  settings: AdsResponse | null
-  canPlaceAd: boolean
-  canRank: boolean
-  onBuy: () => void
-  onShare: () => void
-  children?: ReactNode
-}
-
-// Under the verdict: show the score off with an ad, the leaderboard or a card.
-export function ScoreOffer({
-  larpPercent,
-  settings,
-  canPlaceAd,
-  canRank,
-  onBuy,
-  onShare,
-  children,
-}: OfferProps) {
-  const zone = larpZone(larpPercent)
-  const score = <strong style={{ color: zone.color }}>{larpPercent}% larp</strong>
-
-  return (
-    <section className="offer">
-      <p className="kicker">Is this you?</p>
-      <h2>{larpPercent < 40 ? 'Sharp. Show it off.' : 'Own the larp.'}</h2>
-      {canPlaceAd && settings ? (
-        <p>
-          Put your {score} next to your LinkedIn, your startup or your site (${settings.priceUsd}{' '}
-          for {settings.days} days), or share the score card.
-        </p>
-      ) : canRank ? (
-        <p>Put this {score} on the leaderboard, or share it as a card.</p>
-      ) : (
-        <p>Share your {score}: a card with the score, the meter and the roast.</p>
-      )}
-      <div className="offer-actions">
-        {children}
-        {canPlaceAd && (
-          <button type="button" onClick={onBuy}>
-            Place my ad
-          </button>
-        )}
-        <button type="button" onClick={onShare}>
-          Share
-        </button>
-      </div>
-    </section>
   )
 }
 
@@ -268,18 +186,16 @@ function AdImagePicker({ image, disabled, onChange, onError }: ImagePickerProps)
 }
 
 type FormProps = {
-  score: AdScore
   settings: AdsResponse
   onClose: () => void
 }
 
-// The form to place an ad with a check's score: it sends the visitor to Stripe.
-export function AdForm({ score, settings, onClose }: FormProps) {
+// The form to place an ad: it sends the visitor to Stripe.
+export function AdForm({ settings, onClose }: FormProps) {
   const [ad, setAd] = useState<AdText>({ name: '', headline: '', url: '' })
   const [image, setImage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
-  const zone = larpZone(score.larpPercent)
   const {
     container: humanCheckBox,
     needsClick: humanCheckNeedsClick,
@@ -309,7 +225,7 @@ export function AdForm({ score, settings, onClose }: FormProps) {
       if (!humanToken) {
         throw new Error(errorMessage('bot_check_failed'))
       }
-      const request = { ...ad, checkId: score.checkId, imageJpeg: image }
+      const request = { ...ad, imageJpeg: image }
       const { url } = await startAdCheckout(request, humanToken)
       window.location.assign(url)
     } catch (caught) {
@@ -329,17 +245,9 @@ export function AdForm({ score, settings, onClose }: FormProps) {
           </button>
         </div>
 
-        <div className="ad-form-score">
-          <strong style={{ color: zone.color }}>{score.larpPercent}% larp</strong>
-          <span>
-            {score.githubLogin ? `@${score.githubLogin}` : 'From your CV'} · comes from your
-            check, can't be edited
-          </span>
-        </div>
-
         <p className="ad-form-intro">
-          ${settings.priceUsd} for {settings.days} days. Your name, your score and your link sit
-          next to every check, in front of students, founders and recruiters.
+          ${settings.priceUsd} for {settings.days} days. Your name and your link sit next to every
+          check, in front of students, founders and recruiters.
         </p>
 
         <label>

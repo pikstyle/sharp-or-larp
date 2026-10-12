@@ -1,7 +1,7 @@
 // How many analyses the whole site may run per day (UTC). Each one costs an LLM call, so this is
 // the cap on the bill: tune it to your budget. The per-minute limiter in wrangler.jsonc is only a
 // burst brake, counted per Cloudflare location; this one is counted once, in D1, for every location.
-const DAILY_ANALYSES_MAX = 2000
+const DAILY_ANALYSES_MAX = 10000
 
 // Counts one more analysis for today and tells whether it still fits the daily budget.
 // One UPSERT does the count and the check at once, so parallel requests can't slip past the cap.

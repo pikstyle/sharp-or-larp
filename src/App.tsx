@@ -1,19 +1,12 @@
-import { useEffect, useRef, useState, type SubmitEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import type { AdsResponse, AnalyzeResponse, Board } from '../worker/types.ts'
-import {
-  AdCard,
-  AdEmptyCard,
-  AdForm,
-  AdPlaceholder,
-  AdStrip,
-  ScoreOffer,
-  type AdScore,
-} from './AdSlots.tsx'
+import { AdCard, AdEmptyCard, AdForm, AdPlaceholder, AdStrip } from './AdSlots.tsx'
 import { analyzeProfile, errorMessage, fetchAds } from './api.ts'
 import CvPicker, { type PickedCv } from './CvPicker.tsx'
 import LarpMeter from './LarpMeter.tsx'
 import Leaderboard, { AddToLeaderboard } from './Leaderboard.tsx'
 import LoadingPhrase from './LoadingPhrase.tsx'
+import ScoreOffer from './ScoreOffer.tsx'
 import ShareSheet from './ShareSheet.tsx'
 import { CONTACT_EMAIL } from './Terms.tsx'
 import { useLeaderboard } from './useLeaderboard.ts'
@@ -22,7 +15,7 @@ import Verdict from './Verdict.tsx'
 import VerdictFlash from './VerdictFlash.tsx'
 import { larpZone } from './zones.ts'
 
-const ADS_ENABLED = false
+const ADS_ENABLED = true
 const PLACEHOLDERS_PER_COLUMN = 2
 const AUTHOR_URL = 'https://simon-mounier.com'
 
@@ -58,7 +51,6 @@ export default function App() {
   const [cv, setCv] = useState<PickedCv | null>(null)
   const [result, setResult] = useState<AnalyzeResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [hint, setHint] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [adSettings, setAdSettings] = useState<AdsResponse | null | undefined>(
     ADS_ENABLED ? undefined : null,
@@ -67,8 +59,9 @@ export default function App() {
   const [sharing, setSharing] = useState(false)
   const [paymentReturn] = useState(readPaymentReturn)
   const [boardSort, setBoardSort] = useState<Board>('sharpest')
-  const board = useLeaderboard()
-  const githubInput = useRef<HTMLInputElement>(null)
+  const [boardMinRows, setBoardMinRows] = useState(0)
+  const [boardVersion, setBoardVersion] = useState(0)
+  const board = useLeaderboard(boardSort, boardMinRows, boardVersion)
   const {
     container: humanCheckBox,
     needsClick: humanCheckNeedsClick,
@@ -95,7 +88,6 @@ export default function App() {
 
     setLoading(true)
     setError(null)
-    setHint(null)
     setResult(null)
     try {
       const humanToken = await waitForHumanToken()
@@ -103,7 +95,7 @@ export default function App() {
         throw new Error(errorMessage('bot_check_failed'))
       }
       setResult(await analyzeProfile(github.trim() || null, cv?.input ?? null, humanToken))
-      board.reload()
+      setBoardVersion((version) => version + 1)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -113,19 +105,11 @@ export default function App() {
   }
 
   const verdict = result?.verdict
-  const score: AdScore | null =
-    result?.checkId && verdict
-      ? { checkId: result.checkId, larpPercent: verdict.larpPercent, githubLogin: result.login }
-      : null
+  const rankableCheckId = result?.login ? result.checkId : null
 
-  // Opens the ad form with this score, or asks for a check first: ads show one.
+  // Opens the form to buy an ad spot: anyone can, no check needed.
   function openAdForm() {
-    if (score) {
-      setBuyingAd(true)
-      return
-    }
-    setHint('Run a check first: your ad shows your LARP score.')
-    githubInput.current?.focus()
+    setBuyingAd(true)
   }
 
   const adsLoading = adSettings === undefined
@@ -188,7 +172,6 @@ export default function App() {
           <form className="search" role="search" autoComplete="off" onSubmit={handleSubmit}>
             <div className="search-row">
               <input
-                ref={githubInput}
                 value={github}
                 onChange={(event) => setGithub(event.target.value)}
                 name="github-profile"
@@ -220,11 +203,6 @@ export default function App() {
               {error}
             </p>
           )}
-          {hint && !error && (
-            <p className="hint" role="status">
-              {hint}
-            </p>
-          )}
 
           <LarpMeter
             percent={verdict?.larpPercent ?? 0}
@@ -239,19 +217,17 @@ export default function App() {
           {verdict && (
             <ScoreOffer
               larpPercent={verdict.larpPercent}
-              settings={adSettings ?? null}
-              canPlaceAd={score !== null && freeSlots > 0}
-              canRank={Boolean(score?.githubLogin)}
-              onBuy={openAdForm}
+              canRank={rankableCheckId !== null}
               onShare={() => setSharing(true)}
             >
-              {score?.githubLogin && (
+              {rankableCheckId && (
                 <AddToLeaderboard
-                  key={score.checkId}
-                  checkId={score.checkId}
+                  key={rankableCheckId}
+                  checkId={rankableCheckId}
                   onAdded={(added) => {
                     setBoardSort(added.board)
-                    board.reload()
+                    setBoardMinRows(added.rank)
+                    setBoardVersion((version) => version + 1)
                   }}
                 />
               )}
@@ -259,11 +235,17 @@ export default function App() {
           )}
 
           <Leaderboard
-            boards={board.boards}
+            entries={board.entries}
+            hasMore={board.hasMore}
+            loadingMore={board.loadingMore}
             error={board.error}
             sort={boardSort}
-            onSort={setBoardSort}
             highlightLogin={result?.login ?? null}
+            onSort={(sort) => {
+              setBoardSort(sort)
+              setBoardMinRows(0)
+            }}
+            onMore={board.loadMore}
           />
 
           <SiteFooter />
@@ -286,8 +268,8 @@ export default function App() {
         />
       )}
 
-      {buyingAd && adSettings && score && (
-        <AdForm score={score} settings={adSettings} onClose={() => setBuyingAd(false)} />
+      {buyingAd && adSettings && (
+        <AdForm settings={adSettings} onClose={() => setBuyingAd(false)} />
       )}
 
       {sharing && result && <ShareSheet result={result} onClose={() => setSharing(false)} />}

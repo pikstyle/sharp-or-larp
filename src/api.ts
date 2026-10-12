@@ -4,8 +4,9 @@ import type {
   AdsResponse,
   AnalyzeResponse,
   CvInput,
+  Board,
   LeaderboardAddResponse,
-  LeaderboardResponse,
+  LeaderboardPage,
 } from '../worker/types.ts'
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -70,9 +71,9 @@ export function startAdCheckout(ad: AdRequest, turnstileToken: string) {
   return postJson<AdCheckoutResponse>('/api/ads/checkout', { ...ad, turnstileToken })
 }
 
-// Loads both boards: the sharpest profiles and the larpiest.
-export function fetchLeaderboard() {
-  return callApi<LeaderboardResponse>('/api/leaderboard')
+// Loads one page of 50 profiles from the leaderboard, in the order asked.
+export function fetchLeaderboard(sort: Board, page: number) {
+  return callApi<LeaderboardPage>(`/api/leaderboard?sort=${sort}&page=${page}`)
 }
 
 // Puts the profile of a check on the leaderboard and returns its place.

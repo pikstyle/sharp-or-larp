@@ -32,6 +32,7 @@
   --faint: #5a5a5a;
   --error: #ff6b6b;
   --sharp: #3ddc84;
+  --ad-tint: #3ddba4;
   --larp: #ff4d5e;
   --sans: 'Inter', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
@@ -348,12 +349,6 @@ button.secondary:hover {
   margin-top: 0;
 }
 
-.hint {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text);
-}
-
 .banner {
   width: 100%;
   max-width: 560px;
@@ -657,75 +652,54 @@ button.secondary:hover {
 }
 
 .ad-card {
+  --tint: var(--ad-tint);
+
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   height: auto;
-  padding: 14px;
+  padding: 20px 14px;
   font-family: var(--mono);
   font-size: 0.78rem;
   font-weight: 400;
   line-height: 1.45;
-  text-align: left;
+  text-align: center;
   color: var(--text);
   text-decoration: none;
-  background: var(--bg);
-  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--tint) 12%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--tint) 30%, var(--bg));
   transition: border-color 0.15s ease;
 }
 
 .ad-card:hover {
-  background: var(--bg);
-  border-color: var(--text);
+  background: color-mix(in srgb, var(--tint) 12%, var(--bg));
+  border-color: color-mix(in srgb, var(--tint) 70%, var(--bg));
 }
 
-.ad-card-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.ad-card-head img,
-.ad-card-initial {
+.ad-card img,
+.ad-initial {
   flex: none;
-  width: 36px;
-  height: 36px;
 }
 
-.ad-card-initial {
-  display: grid;
+.ad-initial {
+  display: inline-grid;
   place-items: center;
   font-family: var(--sans);
-  font-size: 1rem;
   font-weight: 600;
-  background: var(--line);
+  background: color-mix(in srgb, var(--tint) 35%, var(--bg));
 }
 
-.ad-card-who {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.ad-card-who strong {
+.ad-card strong {
+  max-width: 100%;
   overflow: hidden;
   font-family: var(--sans);
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ad-card-link {
-  overflow: hidden;
-  font-size: 0.72rem;
-  text-decoration: underline;
-  text-overflow: ellipsis;
-  text-underline-offset: 3px;
   white-space: nowrap;
 }
 
@@ -737,25 +711,16 @@ button.secondary:hover {
   -webkit-box-orient: vertical;
 }
 
-.ad-card-score {
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .ad-card-empty {
-  gap: 6px;
-  border-style: dashed;
-}
+  --tint: var(--muted);
 
-.ad-card-empty strong {
-  font-family: var(--sans);
-  font-size: 0.95rem;
-  font-weight: 600;
+  border-style: dashed;
+  cursor: pointer;
 }
 
 .ad-card-placeholder {
+  --tint: var(--muted);
+
   height: 120px;
   border-style: dashed;
   border-color: var(--line);
@@ -766,7 +731,7 @@ button.secondary:hover {
 .ticker {
   position: relative;
   z-index: 2;
-  height: 40px;
+  height: 44px;
   overflow: hidden;
   font-size: 0.75rem;
   background: var(--bg);
@@ -786,7 +751,9 @@ button.secondary:hover {
 .ticker-track,
 .ticker-copy {
   display: flex;
+  align-items: center;
   width: max-content;
+  height: 100%;
 }
 
 .ticker-track {
@@ -797,11 +764,6 @@ button.secondary:hover {
   animation-direction: reverse;
 }
 
-.ticker-track:hover,
-.ticker-track:focus-within {
-  animation-play-state: paused;
-}
-
 @keyframes ticker {
   to {
     transform: translateX(-50%);
@@ -809,24 +771,26 @@ button.secondary:hover {
 }
 
 .ticker-item {
+  --tint: var(--ad-tint);
+
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 8px;
-  height: 40px;
-  padding: 0 20px;
+  height: 30px;
+  margin-right: 8px;
+  padding: 0 10px;
   font-size: inherit;
   font-weight: 400;
   color: var(--text);
   text-decoration: none;
   white-space: nowrap;
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--tint) 12%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--tint) 30%, var(--bg));
 }
 
 .ticker-item:hover {
-  background: transparent;
+  background: color-mix(in srgb, var(--tint) 12%, var(--bg));
 }
 
 .ticker-item strong {
@@ -835,19 +799,16 @@ button.secondary:hover {
   font-weight: 600;
 }
 
-.ticker-tag {
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.ticker-headline {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ticker-ad,
-.ticker-ad .ticker-tag {
-  color: var(--text);
-}
+.ticker-free {
+  --tint: var(--muted);
 
-.ticker-ad:hover {
-  color: var(--text);
+  border-style: dashed;
 }
 
 /* Sheets (ad form, share) */
@@ -913,28 +874,6 @@ button.secondary:hover {
   color: var(--text);
   background: transparent;
   border-color: var(--text);
-}
-
-.ad-form-score {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 14px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-}
-
-.ad-form-score strong {
-  font-family: var(--sans);
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-}
-
-.ad-form-score span {
-  font-size: 0.75rem;
-  color: var(--text);
 }
 
 .ad-form-intro {
