@@ -40,18 +40,18 @@ export function AdCard({ ad }: CardProps) {
 }
 
 type EmptyCardProps = {
-  settings: AdsResponse
   onBuy: () => void
 }
 
-// The free spot at the end of a column, to place an ad.
-export function AdEmptyCard({ settings, onBuy }: EmptyCardProps) {
+// The free spot at the end of a column: a + to click and what an ad gets.
+export function AdEmptyCard({ onBuy }: EmptyCardProps) {
   return (
     <button type="button" className="ad-card ad-card-empty" onClick={onBuy}>
-      <strong>Own the spot!</strong>
-      <span className="ad-card-headline">
-        ${settings.priceUsd} for {settings.days} days
+      <span className="ad-plus" style={{ width: 36, height: 36 }} aria-hidden="true">
+        +
       </span>
+      <strong>Own the spot!</strong>
+      <span className="ad-card-headline">Your link, seen by everyone</span>
     </button>
   )
 }
@@ -104,7 +104,10 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           onClick={onBuy}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <strong>Own the spot!</strong>${settings.priceUsd} for {settings.days} days
+          <span className="ad-plus" style={{ width: 22, height: 22 }} aria-hidden="true">
+            +
+          </span>
+          <strong>Own the spot!</strong>
         </button>
       ),
     )

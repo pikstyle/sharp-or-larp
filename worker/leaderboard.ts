@@ -32,9 +32,9 @@ const ENTRY_COLUMNS = `github_login AS login, avatar_url AS avatarUrl,
   larp_percent AS larpPercent, updated_at AS updatedAt`
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 
-// Reads the sort and the page of 50 asked for; sharpest first by default.
+// Reads the sort and the page of 50 asked for; newest first by default.
 function readPageRequest(c: AppContext): { sort: Board; page: number } {
-  const sort = SORTS.find((known) => known === c.req.query('sort')) ?? 'sharpest'
+  const sort = SORTS.find((known) => known === c.req.query('sort')) ?? 'newest'
   const page = Number(c.req.query('page') ?? 0)
 
   if (!Number.isInteger(page) || page < 0 || page >= MAX_PAGES) {

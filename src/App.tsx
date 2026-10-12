@@ -58,7 +58,7 @@ export default function App() {
   const [buyingAd, setBuyingAd] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [paymentReturn] = useState(readPaymentReturn)
-  const [boardSort, setBoardSort] = useState<Board>('sharpest')
+  const [boardSort, setBoardSort] = useState<Board>('newest')
   const [boardMinRows, setBoardMinRows] = useState(0)
   const [boardVersion, setBoardVersion] = useState(0)
   const board = useLeaderboard(boardSort, boardMinRows, boardVersion)
@@ -127,7 +127,7 @@ export default function App() {
       .filter((_, index) => index % 2 === side)
       .map((ad, index) => <AdCard key={index} ad={ad} />)
     if (adSettings && freeSlots > 0) {
-      cards.push(<AdEmptyCard key="free" settings={adSettings} onBuy={openAdForm} />)
+      cards.push(<AdEmptyCard key="free" onBuy={openAdForm} />)
     }
     return cards
   }
@@ -148,6 +148,7 @@ export default function App() {
       <div className="layout">
         {ADS_ENABLED && (
           <aside className="ads" aria-label="Ads">
+            <p className="ads-label">Get seen here</p>
             {adColumn(0)}
           </aside>
         )}
@@ -253,6 +254,7 @@ export default function App() {
 
         {ADS_ENABLED && (
           <aside className="ads" aria-label="Ads">
+            <p className="ads-label">Get seen here</p>
             {adColumn(1)}
           </aside>
         )}
