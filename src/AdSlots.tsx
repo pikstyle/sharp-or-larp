@@ -68,7 +68,7 @@ type TickerProps = {
   onBuy: () => void
 }
 
-// A ticker of small ad boxes that scrolls by, at the top or bottom on phones.
+// A ticker of ad boxes (logo and name) scrolling at the top or bottom on phones.
 export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
   const hasFreeSlot = ads.length < settings.slots
   const items: (Ad | null)[] = [...ads, ...(hasFreeSlot ? [null] : [])]
@@ -93,9 +93,8 @@ export function AdStrip({ ads, settings, position, onBuy }: TickerProps) {
           rel={SPONSORED}
           tabIndex={copy === 0 ? 0 : -1}
         >
-          <AdLogo ad={ad} size={18} />
+          <AdLogo ad={ad} size={22} />
           <strong>{ad.name}</strong>
-          <span className="ticker-headline">{ad.headline}</span>
         </a>
       ) : (
         <button

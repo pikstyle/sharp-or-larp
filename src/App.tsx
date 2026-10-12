@@ -148,7 +148,6 @@ export default function App() {
       <div className="layout">
         {ADS_ENABLED && (
           <aside className="ads" aria-label="Ads">
-            <p className="ads-label">Sponsored</p>
             {adColumn(0)}
           </aside>
         )}
@@ -253,7 +252,6 @@ export default function App() {
 
         {ADS_ENABLED && (
           <aside className="ads" aria-label="Ads">
-            <p className="ads-label">Sponsored</p>
             {adColumn(1)}
           </aside>
         )}
