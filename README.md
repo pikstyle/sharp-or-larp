@@ -27,6 +27,31 @@ This project was 99% vibe coded.
 - **Same unchanged profile = same verdict** (the vibe is cached for 30 days)
 - **Zones**: 0–19 Sharp · 20–39 Low · 40–59 Moderate · 60–79 High · 80+ LARP god
 
+## Run it locally
+
+The site runs on your machine with Cloudflare's open-source runtime (workerd) and a local SQLite copy of the database. No Cloudflare account is needed. You need a GitHub token and an Anthropic API key, since every analysis calls both.
+
+With Docker:
+
+```sh
+cp .dev.vars.example .dev.vars   # then fill in GITHUB_TOKEN and ANTHROPIC_API_KEY
+docker compose up --build
+```
+
+Without Docker (Node 22):
+
+```sh
+cp .dev.vars.example .dev.vars   # then fill in GITHUB_TOKEN and ANTHROPIC_API_KEY
+npm ci
+npm run db:migrate
+npm run dev
+```
+
+Then open [http://localhost:5173](http://localhost:5173). Use `localhost`, not `127.0.0.1`: the Turnstile test key only passes on `localhost`.
+
+- Checks and the leaderboard are kept in a Docker volume. `docker compose down -v` starts from a clean database.
+- Buying an ad doesn't work locally (it needs Stripe).
+
 ## Privacy
 
 - GitHub data is public; the scores and the leaderboard use only that.

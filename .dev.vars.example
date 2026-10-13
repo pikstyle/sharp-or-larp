@@ -1,0 +1,14 @@
+# Copy this file to .dev.vars and fill in the first two keys. .dev.vars is git-ignored.
+
+# A GitHub token with read access to public repositories (a fine-grained token with no extra permission is enough).
+GITHUB_TOKEN=
+
+# Your Anthropic API key, for the vibe verdict. Each analysis makes one Claude Haiku call on your account.
+ANTHROPIC_API_KEY=
+
+# Cloudflare's public Turnstile test secret: the bot check always passes on localhost.
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+
+# Only the ad checkout uses Stripe, which doesn't work locally. Leave these placeholders.
+STRIPE_SECRET_KEY=unused
+STRIPE_WEBHOOK_SECRET=unused

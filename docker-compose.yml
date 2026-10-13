@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5173:5173"
+    volumes:
+      # Your keys, read by the Worker at startup.
+      - ./.dev.vars:/app/.dev.vars:ro
+      # The local D1 database (checks, vibe cache, leaderboard), kept across restarts.
+      - wrangler-state:/app/.wrangler
+
+volumes:
+  wrangler-state:

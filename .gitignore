@@ -15,6 +15,7 @@ dist-ssr
 # Cloudflare
 .wrangler
 .dev.vars*
+!.dev.vars.example
 
 # Editor directories and files
 .vscode/*
