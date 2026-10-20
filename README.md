@@ -2,7 +2,7 @@
 
 Drop a GitHub link, a CV, or both. The LARP meter tells you if they're sharp or larping.
 
-Try it: [sharporlarp.com](https://sharporlarp.com)
+Try it: [sharporlarp.com](https://sharporlarp.com) (5,000+ account analyses so far)
 
 ## Larp Alert
 This project was 99% vibe coded. 
